@@ -1,51 +1,33 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:go_router/go_router.dart';
+import '../../providers/auth_provider.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/app_routes.dart';
 import '../../utils/constants.dart';
 import '../../widgets/gov_logo.dart';
 
-class SplashScreen extends StatefulWidget {
+class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _fadeAnimation;
+class _SplashScreenState extends ConsumerState<SplashScreen> {
   Timer? _navigationTimer;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    );
-
-    _scaleAnimation = Tween<double>(begin: 0.7, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Curves.easeOutBack,
-      ),
-    );
-
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.2, 1.0, curve: Curves.easeIn),
-      ),
-    );
-
-    _controller.forward();
-
-    _navigationTimer = Timer(AppConstants.splashDuration, () {
-      if (mounted) {
-        Navigator.pushReplacementNamed(context, AppRoutes.login);
+    _navigationTimer = Timer(const Duration(milliseconds: 2500), () {
+      if (!mounted) return;
+      final authState = ref.read(authProvider);
+      if (authState.isLoggedIn && authState.currentUser != null) {
+        context.go('/dashboard');
+      } else {
+        context.go('/login');
       }
     });
   }
@@ -53,7 +35,6 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   void dispose() {
     _navigationTimer?.cancel();
-    _controller.dispose();
     super.dispose();
   }
 
@@ -63,101 +44,79 @@ class _SplashScreenState extends State<SplashScreen>
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: AppTheme.splashGradient,
-        ),
+        decoration: const BoxDecoration(gradient: AppTheme.splashGradient),
         child: SafeArea(
-          child: AnimatedBuilder(
-            animation: _controller,
-            builder: (context, child) {
-              return Column(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const SizedBox(height: 40),
+              // Center Content
+              Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  const SizedBox(height: 40),
-                  // Center Content
+                  const GovLogo(size: 110, showLabel: true)
+                      .animate()
+                      .scale(duration: 800.ms, curve: Curves.easeOutBack)
+                      .fadeIn(duration: 600.ms),
+                  const SizedBox(height: 28),
                   Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Transform.scale(
-                        scale: _scaleAnimation.value,
-                        child: Opacity(
-                          opacity: _fadeAnimation.value,
-                          child: const GovLogo(
-                            size: 110,
-                            showLabel: true,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-                      Opacity(
-                        opacity: _fadeAnimation.value,
-                        child: Column(
-                          children: [
-                            const Text(
-                              AppConstants.appName,
-                              style: TextStyle(
-                                fontSize: 32,
-                                fontWeight: FontWeight.w800,
-                                color: AppTheme.primaryBlue,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 32),
-                              child: Text(
-                                AppConstants.appTagline,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppTheme.primaryBlue.withAlpha(220),
-                                  height: 1.4,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  // Bottom Version
-                  Opacity(
-                    opacity: _fadeAnimation.value,
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 6,
+                          const Text(
+                            AppConstants.appName,
+                            style: TextStyle(
+                              fontSize: 32,
+                              fontWeight: FontWeight.w800,
+                              color: AppTheme.primaryBlue,
+                              letterSpacing: 0.5,
                             ),
-                            decoration: BoxDecoration(
-                              color: AppTheme.primaryBlue.withAlpha(15),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: AppTheme.primaryBlue.withAlpha(40),
-                              ),
-                            ),
-                            child: const Text(
-                              AppConstants.appVersion,
+                          ),
+                          const SizedBox(height: 8),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 32),
+                            child: Text(
+                              AppConstants.appTagline,
+                              textAlign: TextAlign.center,
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: 14,
                                 fontWeight: FontWeight.w600,
-                                color: AppTheme.primaryBlue,
+                                color: AppTheme.primaryBlue.withAlpha(220),
+                                height: 1.4,
                               ),
                             ),
                           ),
                         ],
-                      ),
+                      )
+                      .animate()
+                      .fadeIn(delay: 300.ms, duration: 600.ms)
+                      .slideY(begin: 0.2, end: 0.0),
+                ],
+              ),
+              // Bottom Version
+              Padding(
+                padding: const EdgeInsets.only(bottom: 24),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryBlue.withAlpha(15),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: AppTheme.primaryBlue.withAlpha(40),
                     ),
                   ),
-                ],
-              );
-            },
+                  child: const Text(
+                    AppConstants.appVersion,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.primaryBlue,
+                    ),
+                  ),
+                ).animate().fadeIn(delay: 500.ms, duration: 500.ms),
+              ),
+            ],
           ),
         ),
       ),

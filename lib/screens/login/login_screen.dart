@@ -1,27 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../providers/auth_provider.dart';
+import '../../repositories/auth_repository.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/app_routes.dart';
 import '../../utils/constants.dart';
 import '../../utils/validators.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../widgets/gov_logo.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
   bool _obscurePassword = true;
   bool _rememberMe = false;
-  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -30,7 +32,7 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _handleLogin() {
+  Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -42,48 +44,44 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
 
-    Future.delayed(const Duration(milliseconds: 600), () {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Login successful! Welcome to JanMitra AI.'),
-            backgroundColor: AppTheme.success,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
-      }
-    });
-  }
+    final result = await ref
+        .read(authProvider.notifier)
+        .login(email: email, password: password);
 
-  void _handleGuestLogin() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Logged in as Guest Citizen.'),
-        backgroundColor: AppTheme.infoBlue,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-    Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
+    if (!mounted) return;
+
+    if (result.status == AuthResultStatus.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Login successful! Welcome to JanMitra AI.'),
+          backgroundColor: AppTheme.success,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      context.go('/dashboard');
+    } else {
+      // Show exact failure message (Email not registered OR Incorrect password)
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.errorMessage ?? 'Authentication failed.'),
+          backgroundColor: AppTheme.danger,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   void _handleForgotPassword() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         title: const Text('Reset Password'),
         content: const Text(
-          'A password reset link will be sent to your registered email address or mobile linked with Aadhaar.',
+          'Password reset relies on your registered email address or mobile linked with Aadhaar.',
         ),
         actions: [
           TextButton(
@@ -95,34 +93,25 @@ class _LoginScreenState extends State<LoginScreen> {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Reset link sent successfully.'),
+                  content: Text('Reset request submitted.'),
                   backgroundColor: AppTheme.success,
                   behavior: SnackBarBehavior.floating,
                 ),
               );
             },
-            child: const Text('Send Link'),
+            child: const Text('OK'),
           ),
         ],
       ),
     );
   }
 
-  void _handleSocialLogin(String provider) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$provider authentication selected.'),
-        backgroundColor: AppTheme.infoBlue,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-    Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
-  }
-
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
+
     return Scaffold(
-      backgroundColor: AppTheme.lightBg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -143,12 +132,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: TextStyle(
                         fontSize: 26,
                         fontWeight: FontWeight.w800,
-                        color: AppTheme.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 6),
                     const Text(
-                      'Sign in to access public grievance intelligence & services',
+                      'Sign in with your registered credentials to access services',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,
@@ -206,7 +194,6 @@ class _LoginScreenState extends State<LoginScreen> {
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
-                                color: AppTheme.textPrimary,
                               ),
                             ),
                           ],
@@ -229,57 +216,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     CustomButton(
                       text: 'Sign In',
                       onPressed: _handleLogin,
-                      isLoading: _isLoading,
-                    ),
-                    const SizedBox(height: 12),
-                    // Guest Login Button
-                    CustomButton(
-                      text: 'Continue as Guest',
-                      isOutlined: true,
-                      onPressed: _handleGuestLogin,
-                    ),
-                    const SizedBox(height: 24),
-                    // Social Dividers
-                    Row(
-                      children: const [
-                        Expanded(child: Divider(color: AppTheme.borderLight)),
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 12),
-                          child: Text(
-                            'OR SIGN IN WITH',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: AppTheme.textMuted,
-                            ),
-                          ),
-                        ),
-                        Expanded(child: Divider(color: AppTheme.borderLight)),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    // Social / DigiLocker Buttons
-                    Row(
-                      children: [
-                        SocialAuthButton(
-                          label: 'DigiLocker',
-                          icon: Icons.verified_outlined,
-                          iconColor: AppTheme.secondaryTeal,
-                          onPressed: () => _handleSocialLogin('DigiLocker'),
-                        ),
-                        const SizedBox(width: 12),
-                        SocialAuthButton(
-                          label: 'Google',
-                          icon: Icons.g_mobiledata_rounded,
-                          iconColor: AppTheme.danger,
-                          onPressed: () => _handleSocialLogin('Google'),
-                        ),
-                      ],
+                      isLoading: authState.isLoading,
                     ),
                     const SizedBox(height: 32),
                     // Register Prompt
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         const Text(
                           "Don't have an account? ",
@@ -290,7 +233,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         GestureDetector(
                           onTap: () {
-                            Navigator.pushNamed(context, AppRoutes.register);
+                            context.push('/register');
                           },
                           child: const Text(
                             'Register Now',

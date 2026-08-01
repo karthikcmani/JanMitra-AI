@@ -10,9 +10,7 @@ class Validators {
     if (value == null || value.trim().isEmpty) {
       return 'Email address is required';
     }
-    final emailRegExp = RegExp(
-      r'^[a-zA-Z0-9.]+@[a-zA-Z0-9]+\.[a-zA-Z]+',
-    );
+    final emailRegExp = RegExp(r'^[a-zA-Z0-9.]+@[a-zA-Z0-9]+\.[a-zA-Z]+');
     if (!emailRegExp.hasMatch(value.trim())) {
       return 'Please enter a valid email address';
     }
@@ -40,7 +38,10 @@ class Validators {
     return null;
   }
 
-  static String? validateConfirmPassword(String? value, String originalPassword) {
+  static String? validateConfirmPassword(
+    String? value,
+    String originalPassword,
+  ) {
     if (value == null || value.isEmpty) {
       return 'Please confirm your password';
     }
