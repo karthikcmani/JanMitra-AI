@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/complaint_provider.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/app_routes.dart';
 import '../../utils/constants.dart';
 import '../../widgets/stat_card.dart';
+import '../main_citizen_shell.dart';
 
-class DashboardScreen extends StatefulWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
-  int _currentBottomNavIndex = 0;
-
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   String _getGreeting() {
     final hour = DateTime.now().hour;
     if (hour < 12) {
@@ -25,31 +27,74 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  void _onBottomNavTapped(int index) {
-    if (index == 0) {
-      setState(() {
-        _currentBottomNavIndex = 0;
-      });
-      return;
-    }
+  String _getFormattedDate() {
+    final now = DateTime.now();
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final days = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+    final dayName = days[now.weekday - 1];
+    final monthName = months[now.month - 1];
+    return '$dayName, ${now.day} $monthName ${now.year}';
+  }
 
-    switch (index) {
-      case 1:
-        Navigator.pushNamed(context, AppRoutes.complaints);
-        break;
-      case 2:
-        Navigator.pushNamed(context, AppRoutes.ai);
-        break;
-      case 3:
-        Navigator.pushNamed(context, AppRoutes.profile);
-        break;
+  Future<void> _handleLogout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Confirm Logout'),
+        content: const Text(
+          'Are you sure you want to sign out of your session?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger),
+            child: const Text('Sign Out'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      await ref.read(authProvider.notifier).logout();
+      if (mounted) {
+        context.go('/login');
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
+    final complaintState = ref.watch(complaintProvider);
+    final user = authState.currentUser;
+
     return Scaffold(
-      backgroundColor: AppTheme.lightBg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Row(
           children: [
@@ -78,23 +123,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.notifications_outlined, color: AppTheme.textPrimary),
-            onPressed: () {
-              Navigator.pushNamed(context, AppRoutes.notifications);
-            },
+            icon: const Icon(Icons.logout_rounded),
+            tooltip: 'Sign Out',
+            onPressed: _handleLogout,
           ),
           Padding(
             padding: const EdgeInsets.only(right: 16, left: 4),
             child: GestureDetector(
               onTap: () {
-                Navigator.pushNamed(context, AppRoutes.profile);
+                MainCitizenShellController.of(context)?.onSelectTab(3);
               },
-              child: const CircleAvatar(
+              child: CircleAvatar(
                 radius: 18,
                 backgroundColor: AppTheme.secondaryTeal,
                 child: Text(
-                  'C',
-                  style: TextStyle(
+                  user?.fullName.isNotEmpty == true
+                      ? user!.fullName[0].toUpperCase()
+                      : 'C',
+                  style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
                     fontSize: 14,
@@ -111,75 +157,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Greeting Banner Card
-            _buildGreetingCard(),
+            _buildGreetingCard(user?.fullName ?? 'Citizen'),
             const SizedBox(height: 20),
 
-            // Statistics Cards Grid
+            // Statistics Grid (Live count calculated from Hive)
             const Text(
               'Grievance Overview',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimary,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
-            _buildStatisticsGrid(),
+            _buildStatisticsGrid(
+              total: complaintState.totalCount,
+              pending: complaintState.pendingCount,
+              resolved: complaintState.resolvedCount,
+            ),
 
             const SizedBox(height: 24),
 
             // Quick Actions Section
             const Text(
               'Quick Actions',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimary,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
-            _buildQuickActionsGrid(),
+            _buildQuickActionsGrid(context),
 
             const SizedBox(height: 24),
 
-            // Recent Activity Card
-            _buildRecentActivityCard(),
-
-            const SizedBox(height: 24),
-
-            // Latest Government Updates Card
-            _buildGovernmentUpdatesCard(),
+            // Recent Activity Section
+            _buildRecentActivityCard(complaintState),
 
             const SizedBox(height: 16),
           ],
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentBottomNavIndex,
-        onTap: _onBottomNavTapped,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_rounded),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.assignment_outlined),
-            label: 'Complaints',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.smart_toy_outlined),
-            label: 'AI Assistant',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline_rounded),
-            label: 'Profile',
-          ),
-        ],
-      ),
     );
   }
 
-  Widget _buildGreetingCard() {
+  Widget _buildGreetingCard(String name) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -194,99 +209,101 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ],
       ),
-      child: Stack(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Positioned(
-            right: -10,
-            bottom: -10,
-            child: Icon(
-              Icons.auto_awesome_rounded,
-              size: 100,
-              color: Colors.white.withAlpha(25),
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withAlpha(40),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Text(
-                      'AI Active • Smart Portal',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(40),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text(
+                  'Phase 1 Live • Official App',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
                   ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '${_getGreeting()}, Citizen',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(height: 6),
               Text(
-                'Submit, track and resolve grievances using AI-driven automated routing.',
+                _getFormattedDate(),
                 style: TextStyle(
-                  color: Colors.white.withAlpha(230),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w400,
-                  height: 1.3,
+                  color: Colors.white.withAlpha(220),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            '${_getGreeting()}, $name',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'File, track, and manage public grievances seamlessly with local database persistence.',
+            style: TextStyle(
+              color: Colors.white.withAlpha(230),
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+              height: 1.3,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStatisticsGrid() {
+  Widget _buildStatisticsGrid({
+    required int total,
+    required int pending,
+    required int resolved,
+  }) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final crossAxisCount = constraints.maxWidth > 600 ? 3 : 3;
         return GridView.count(
-          crossAxisCount: crossAxisCount,
+          crossAxisCount: 3,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           crossAxisSpacing: 10,
           mainAxisSpacing: 10,
           childAspectRatio: constraints.maxWidth > 360 ? 0.95 : 0.85,
-          children: const [
+          children: [
             StatCard(
               title: 'Total',
-              count: '24',
+              count: total.toString().padLeft(2, '0'),
               icon: Icons.folder_open_rounded,
               iconColor: AppTheme.primaryBlue,
-              iconBgColor: Color(0xFFE0F2FE),
+              iconBgColor: const Color(0xFFE0F2FE),
               subtitle: 'Grievances',
             ),
             StatCard(
               title: 'Pending',
-              count: '05',
+              count: pending.toString().padLeft(2, '0'),
               icon: Icons.hourglass_top_rounded,
               iconColor: AppTheme.warning,
-              iconBgColor: Color(0xFFFEF3C7),
+              iconBgColor: const Color(0xFFFEF3C7),
               subtitle: 'In Progress',
             ),
             StatCard(
               title: 'Resolved',
-              count: '19',
+              count: resolved.toString().padLeft(2, '0'),
               icon: Icons.check_circle_outline_rounded,
               iconColor: AppTheme.success,
-              iconBgColor: Color(0xD1D1FADF),
+              iconBgColor: const Color(0xD1D1FADF),
               subtitle: 'Completed',
             ),
           ],
@@ -295,39 +312,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildQuickActionsGrid() {
+  Widget _buildQuickActionsGrid(BuildContext context) {
     final actions = [
       {
-        'title': 'File Complaint',
-        'subtitle': 'Submit new grievance',
+        'title': 'New Grievance',
+        'subtitle': 'File a complaint',
         'icon': Icons.add_circle_outline_rounded,
         'color': AppTheme.primaryBlue,
         'bgColor': const Color(0xFFE0F2FE),
-        'route': AppRoutes.complaints,
+        'onTap': () => context.push('/complaints/new'),
       },
       {
-        'title': 'AI Assistant',
-        'subtitle': 'Ask JanMitra AI',
-        'icon': Icons.smart_toy_rounded,
+        'title': 'My Complaints',
+        'subtitle': 'View all submitted',
+        'icon': Icons.assignment_outlined,
         'color': AppTheme.secondaryTeal,
         'bgColor': const Color(0xFFCCFBF1),
-        'route': AppRoutes.ai,
+        'onTap': () => MainCitizenShellController.of(context)?.onSelectTab(1),
       },
       {
-        'title': 'Track Complaint',
-        'subtitle': 'Check status by ID',
+        'title': 'Track Status',
+        'subtitle': 'Timeline & stages',
         'icon': Icons.my_location_rounded,
         'color': const Color(0xFF7C3AED),
         'bgColor': const Color(0xFFEDE9FE),
-        'route': AppRoutes.tracking,
+        'onTap': () => MainCitizenShellController.of(context)?.onSelectTab(2),
       },
       {
-        'title': 'Notifications',
-        'subtitle': 'Updates & Alerts',
-        'icon': Icons.notifications_none_rounded,
+        'title': 'Citizen Profile',
+        'subtitle': 'User & settings',
+        'icon': Icons.person_outline_rounded,
         'color': AppTheme.warning,
         'bgColor': const Color(0xFFFEF3C7),
-        'route': AppRoutes.notifications,
+        'onTap': () => MainCitizenShellController.of(context)?.onSelectTab(3),
       },
     ];
 
@@ -344,14 +361,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       itemBuilder: (context, index) {
         final item = actions[index];
         return InkWell(
-          onTap: () {
-            Navigator.pushNamed(context, item['route'] as String);
-          },
+          onTap: item['onTap'] as VoidCallback,
           borderRadius: BorderRadius.circular(AppConstants.cardRadius),
           child: Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppTheme.lightSurface,
+              color: Theme.of(context).cardTheme.color,
               borderRadius: BorderRadius.circular(AppConstants.cardRadius),
               border: Border.all(color: AppTheme.borderLight),
             ),
@@ -377,7 +392,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: AppTheme.textPrimary,
                   ),
                 ),
                 Text(
@@ -395,11 +409,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildRecentActivityCard() {
+  Widget _buildRecentActivityCard(ComplaintState complaintState) {
+    final recentComplaints = complaintState.complaints.take(3).toList();
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppTheme.lightSurface,
+        color: Theme.of(context).cardTheme.color,
         borderRadius: BorderRadius.circular(AppConstants.cardRadius),
         border: Border.all(color: AppTheme.borderLight),
       ),
@@ -410,140 +426,92 @@ class _DashboardScreenState extends State<DashboardScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                'Recent Activity',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
-                ),
+                'Recent Complaints',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
               ),
               TextButton(
                 onPressed: () {
-                  Navigator.pushNamed(context, AppRoutes.complaints);
+                  MainCitizenShellController.of(context)?.onSelectTab(1);
                 },
                 child: const Text('View All'),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          _buildActivityTile(
-            title: 'Water Supply Disruption #GR-9842',
-            department: 'Municipal Water Board',
-            status: 'In Progress',
-            statusColor: AppTheme.warning,
-            date: 'Today, 09:30 AM',
-          ),
-          const Divider(color: AppTheme.borderLight, height: 20),
-          _buildActivityTile(
-            title: 'Streetlight Repair Request #GR-9810',
-            department: 'Public Works Dept',
-            status: 'Resolved',
-            statusColor: AppTheme.success,
-            date: 'Yesterday, 04:15 PM',
-          ),
+          if (recentComplaints.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16.0),
+              child: Center(
+                child: Text(
+                  'No grievances submitted yet. Tap "New Grievance" to start!',
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                ),
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: recentComplaints.length,
+              separatorBuilder: (context, index) =>
+                  const Divider(color: AppTheme.borderLight, height: 16),
+              itemBuilder: (context, index) {
+                final complaint = recentComplaints[index];
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    '${complaint.title} (${complaint.id})',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: Text(
+                    '${complaint.department} • ${complaint.category}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _getStatusColor(complaint.status).withAlpha(20),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      complaint.status,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: _getStatusColor(complaint.status),
+                      ),
+                    ),
+                  ),
+                  onTap: () => context.push('/tracking?id=${complaint.id}'),
+                );
+              },
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildActivityTile({
-    required String title,
-    required String department,
-    required String status,
-    required Color statusColor,
-    required String date,
-  }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          margin: const EdgeInsets.only(top: 4),
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: statusColor,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                '$department • $date',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppTheme.textSecondary,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: statusColor.withAlpha(20),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            status,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: statusColor,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildGovernmentUpdatesCard() {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppTheme.lightSurface,
-        borderRadius: BorderRadius.circular(AppConstants.cardRadius),
-        border: Border.all(color: AppTheme.borderLight),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: const [
-              Icon(Icons.campaign_outlined, color: AppTheme.primaryBlue, size: 20),
-              SizedBox(width: 8),
-              Text(
-                'Latest Government Directives',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'JanMitra AI now automatically routes priority civic issues directly to municipal zonal officers within 15 minutes of submission.',
-            style: TextStyle(
-              fontSize: 13,
-              color: AppTheme.textSecondary,
-              height: 1.4,
-            ),
-          ),
-        ],
-      ),
-    );
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'Submitted':
+        return AppTheme.primaryBlue;
+      case 'Verification':
+        return AppTheme.warning;
+      case 'Forwarded':
+        return const Color(0xFF7C3AED);
+      case 'Resolved':
+        return AppTheme.success;
+      default:
+        return AppTheme.textSecondary;
+    }
   }
 }

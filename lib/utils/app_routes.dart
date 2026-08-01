@@ -21,27 +21,22 @@ class AppRoutes {
   static const String profile = '/profile';
 
   static Map<String, WidgetBuilder> get routes => {
-        splash: (context) => const SplashScreen(),
-        login: (context) => const LoginScreen(),
-        register: (context) => const RegisterScreen(),
-        dashboard: (context) => const DashboardScreen(),
-        complaints: (context) => const ComplaintsScreen(),
-        ai: (context) => const AiScreen(),
-        tracking: (context) => const TrackingScreen(),
-        notifications: (context) => const NotificationsScreen(),
-        profile: (context) => const ProfileScreen(),
-      };
+    splash: (context) => const SplashScreen(),
+    login: (context) => const LoginScreen(),
+    register: (context) => const RegisterScreen(),
+    dashboard: (context) => const DashboardScreen(),
+    complaints: (context) => const ComplaintsScreen(),
+    ai: (context) => const AiScreen(),
+    tracking: (context) => const TrackingScreen(),
+    notifications: (context) => const NotificationsScreen(),
+    profile: (context) => const ProfileScreen(),
+  };
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     final builder = routes[settings.name];
     if (builder != null) {
-      return MaterialPageRoute(
-        builder: builder,
-        settings: settings,
-      );
+      return MaterialPageRoute(builder: builder, settings: settings);
     }
-    return MaterialPageRoute(
-      builder: (context) => const SplashScreen(),
-    );
+    return MaterialPageRoute(builder: (context) => const SplashScreen());
   }
 }

@@ -21,10 +21,6 @@ class AppConstants {
 
   // Decorative Shadows
   static const List<BoxShadow> softShadow = [
-    BoxShadow(
-      color: Color(0x0A000000),
-      blurRadius: 12,
-      offset: Offset(0, 4),
-    ),
+    BoxShadow(color: Color(0x0A000000), blurRadius: 12, offset: Offset(0, 4)),
   ];
 }
