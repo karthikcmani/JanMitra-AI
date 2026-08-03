@@ -2,9 +2,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/complaint_model.dart';
 import '../repositories/complaint_repository.dart';
 import 'auth_provider.dart';
+import 'theme_provider.dart';
 
 final complaintRepositoryProvider = Provider<ComplaintRepository>((ref) {
-  return ComplaintRepository();
+  final apiService = ref.watch(apiServiceProvider);
+  return ComplaintRepository(apiService);
 });
 
 class ComplaintState {
@@ -62,13 +64,13 @@ class ComplaintNotifier extends StateNotifier<ComplaintState> {
     loadComplaints();
   }
 
-  void loadComplaints() {
+  Future<void> loadComplaints() async {
     if (_userEmail == null || _userEmail.isEmpty) {
       state = state.copyWith(complaints: []);
       return;
     }
     state = state.copyWith(isLoading: true);
-    final list = _repository.getComplaintsForUser(_userEmail);
+    final list = await _repository.getComplaintsForUser(_userEmail);
     state = state.copyWith(complaints: list, isLoading: false);
   }
 
@@ -92,23 +94,25 @@ class ComplaintNotifier extends StateNotifier<ComplaintState> {
       priority: priority,
     );
 
-    loadComplaints();
+    if (newComplaint != null) {
+      await loadComplaints();
+    }
     return newComplaint;
   }
 
   Future<void> updateComplaint(ComplaintModel complaint) async {
     await _repository.updateComplaint(complaint);
-    loadComplaints();
+    await loadComplaints();
   }
 
   Future<void> updateStatus(String id, String newStatus) async {
     await _repository.updateStatus(id, newStatus);
-    loadComplaints();
+    await loadComplaints();
   }
 
   Future<void> deleteComplaint(String id) async {
     await _repository.deleteComplaint(id);
-    loadComplaints();
+    await loadComplaints();
   }
 
   void setCategoryFilter(String category) {

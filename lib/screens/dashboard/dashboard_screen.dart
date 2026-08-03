@@ -160,7 +160,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             _buildGreetingCard(user?.fullName ?? 'Citizen'),
             const SizedBox(height: 20),
 
-            // Statistics Grid (Live count calculated from Hive)
+            // Statistics Grid (Live count)
             const Text(
               'Grievance Overview',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
@@ -412,90 +412,96 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget _buildRecentActivityCard(ComplaintState complaintState) {
     final recentComplaints = complaintState.complaints.take(3).toList();
 
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardTheme.color,
-        borderRadius: BorderRadius.circular(AppConstants.cardRadius),
-        border: Border.all(color: AppTheme.borderLight),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Recent Complaints',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-              ),
-              TextButton(
-                onPressed: () {
-                  MainCitizenShellController.of(context)?.onSelectTab(1);
-                },
-                child: const Text('View All'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (recentComplaints.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16.0),
-              child: Center(
-                child: Text(
-                  'No grievances submitted yet. Tap "New Grievance" to start!',
-                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+    return Material(
+      color: Theme.of(context).cardTheme.color,
+      borderRadius: BorderRadius.circular(AppConstants.cardRadius),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppConstants.cardRadius),
+          border: Border.all(color: AppTheme.borderLight),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Recent Complaints',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                 ),
-              ),
-            )
-          else
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: recentComplaints.length,
-              separatorBuilder: (context, index) =>
-                  const Divider(color: AppTheme.borderLight, height: 16),
-              itemBuilder: (context, index) {
-                final complaint = recentComplaints[index];
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    '${complaint.title} (${complaint.id})',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  subtitle: Text(
-                    '${complaint.department} • ${complaint.category}',
-                    style: const TextStyle(
-                      fontSize: 12,
+                TextButton(
+                  onPressed: () {
+                    MainCitizenShellController.of(context)?.onSelectTab(1);
+                  },
+                  child: const Text('View All'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (recentComplaints.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16.0),
+                child: Center(
+                  child: Text(
+                    'No grievances submitted yet. Tap "New Grievance" to start!',
+                    style: TextStyle(
                       color: AppTheme.textSecondary,
+                      fontSize: 13,
                     ),
                   ),
-                  trailing: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _getStatusColor(complaint.status).withAlpha(20),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      complaint.status,
-                      style: TextStyle(
-                        fontSize: 11,
+                ),
+              )
+            else
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: recentComplaints.length,
+                separatorBuilder: (context, index) =>
+                    const Divider(color: AppTheme.borderLight, height: 16),
+                itemBuilder: (context, index) {
+                  final complaint = recentComplaints[index];
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      '${complaint.title} (${complaint.id})',
+                      style: const TextStyle(
+                        fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: _getStatusColor(complaint.status),
                       ),
                     ),
-                  ),
-                  onTap: () => context.push('/tracking?id=${complaint.id}'),
-                );
-              },
-            ),
-        ],
+                    subtitle: Text(
+                      '${complaint.department} • ${complaint.category}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                    trailing: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _getStatusColor(complaint.status).withAlpha(20),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        complaint.status,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: _getStatusColor(complaint.status),
+                        ),
+                      ),
+                    ),
+                    onTap: () => context.push('/tracking?id=${complaint.id}'),
+                  );
+                },
+              ),
+          ],
+        ),
       ),
     );
   }

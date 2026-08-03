@@ -56,7 +56,7 @@ class ComplaintModel {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'userEmail': userEmail,
+      'user_email': userEmail,
       'title': title,
       'category': category,
       'department': department,
@@ -64,15 +64,15 @@ class ComplaintModel {
       'description': description,
       'priority': priority,
       'status': status,
-      'createdAt': createdAt.toIso8601String(),
-      'updatedAt': updatedAt.toIso8601String(),
+      'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt.toIso8601String(),
     };
   }
 
   factory ComplaintModel.fromJson(Map<String, dynamic> json) {
     return ComplaintModel(
       id: json['id'] as String,
-      userEmail: json['userEmail'] as String,
+      userEmail: (json['user_email'] ?? json['userEmail'] ?? '') as String,
       title: json['title'] as String,
       category: json['category'] as String,
       department: json['department'] as String,
@@ -80,8 +80,12 @@ class ComplaintModel {
       description: json['description'] as String,
       priority: json['priority'] as String,
       status: json['status'] as String,
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      updatedAt: DateTime.parse(json['updatedAt'] as String),
+      createdAt: DateTime.parse(
+        (json['created_at'] ?? json['createdAt']) as String,
+      ),
+      updatedAt: DateTime.parse(
+        (json['updated_at'] ?? json['updatedAt']) as String,
+      ),
     );
   }
 }

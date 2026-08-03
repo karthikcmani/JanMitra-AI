@@ -2,21 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/app_router.dart';
 import 'providers/theme_provider.dart';
-import 'services/hive_service.dart';
-import 'services/session_service.dart';
+import 'services/preferences_service.dart';
+import 'services/secure_storage_service.dart';
 import 'theme/app_theme.dart';
 import 'utils/constants.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Local Databases & Session Storage
-  await HiveService.init();
-  final sessionService = await SessionService.init();
+  // Initialize SharedPreferences & SecureStorage
+  final preferencesService = await PreferencesService.init();
+  final secureStorageService = SecureStorageService();
 
   runApp(
     ProviderScope(
-      overrides: [sessionServiceProvider.overrideWithValue(sessionService)],
+      overrides: [
+        preferencesServiceProvider.overrideWithValue(preferencesService),
+        secureStorageServiceProvider.overrideWithValue(secureStorageService),
+      ],
       child: const JanMitraApp(),
     ),
   );

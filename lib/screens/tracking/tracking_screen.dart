@@ -58,11 +58,31 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     initialValue: _selectedId,
+                    dropdownColor:
+                        Theme.of(context).brightness == Brightness.dark
+                        ? AppTheme.darkSurface
+                        : Colors.white,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white
+                          : Colors.black87,
+                    ),
                     items: complaints
                         .map(
                           (c) => DropdownMenuItem(
                             value: c.id,
-                            child: Text('${c.id} - ${c.title}'),
+                            child: Text(
+                              '${c.id} - ${c.title}',
+                              style: TextStyle(
+                                color:
+                                    Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? Colors.white
+                                    : Colors.black87,
+                              ),
+                            ),
                           ),
                         )
                         .toList(),
@@ -306,7 +326,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
           ),
           const SizedBox(height: 6),
           const Text(
-            'In Phase 1 offline mode, you can transition stages directly to test Hive database updates.',
+            'Status transition stages are prepared for FastAPI backend API updates.',
             style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
           ),
           const SizedBox(height: 16),

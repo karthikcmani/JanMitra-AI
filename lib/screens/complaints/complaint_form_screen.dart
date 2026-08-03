@@ -179,6 +179,11 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.complaintId != null;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final labelColor = isDark
+        ? AppTheme.darkTextPrimary
+        : AppTheme.lightTextPrimary;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -221,6 +226,9 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
                       value: _category,
                       items: categories,
                       onChanged: (val) => setState(() => _category = val!),
+                      labelColor: labelColor,
+                      textColor: textColor,
+                      isDark: isDark,
                     ),
                     const SizedBox(height: 18),
 
@@ -230,6 +238,9 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
                       value: _department,
                       items: departments,
                       onChanged: (val) => setState(() => _department = val!),
+                      labelColor: labelColor,
+                      textColor: textColor,
+                      isDark: isDark,
                     ),
                     const SizedBox(height: 18),
 
@@ -239,6 +250,9 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
                       value: _district,
                       items: districts,
                       onChanged: (val) => setState(() => _district = val!),
+                      labelColor: labelColor,
+                      textColor: textColor,
+                      isDark: isDark,
                     ),
                     const SizedBox(height: 18),
 
@@ -248,15 +262,19 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
                       value: _priority,
                       items: priorities,
                       onChanged: (val) => setState(() => _priority = val!),
+                      labelColor: labelColor,
+                      textColor: textColor,
+                      isDark: isDark,
                     ),
                     const SizedBox(height: 18),
 
                     // Description Field
-                    const Text(
+                    Text(
                       'Detailed Description',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
+                        color: labelColor,
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -265,6 +283,12 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
                       maxLines: 4,
                       validator: (v) =>
                           Validators.validateRequired(v, 'Description'),
+                      cursorColor: AppTheme.primaryBlue,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                        color: textColor,
+                      ),
                       decoration: const InputDecoration(
                         hintText:
                             'Describe the issue clearly, including location details and impact...',
@@ -293,19 +317,37 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
     required String value,
     required List<String> items,
     required ValueChanged<String?> onChanged,
+    required Color labelColor,
+    required Color textColor,
+    required bool isDark,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: labelColor,
+          ),
         ),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
           initialValue: value,
+          dropdownColor: isDark ? AppTheme.darkSurface : Colors.white,
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            color: textColor,
+          ),
           items: items
-              .map((item) => DropdownMenuItem(value: item, child: Text(item)))
+              .map(
+                (item) => DropdownMenuItem(
+                  value: item,
+                  child: Text(item, style: TextStyle(color: textColor)),
+                ),
+              )
               .toList(),
           onChanged: onChanged,
           decoration: const InputDecoration(),

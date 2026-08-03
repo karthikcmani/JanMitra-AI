@@ -1,25 +1,37 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../services/session_service.dart';
+import '../services/preferences_service.dart';
+import '../services/secure_storage_service.dart';
+import '../services/api_service.dart';
 
-final sessionServiceProvider = Provider<SessionService>((ref) {
+final preferencesServiceProvider = Provider<PreferencesService>((ref) {
   throw UnimplementedError(
-    'sessionServiceProvider must be overridden in ProviderScope',
+    'preferencesServiceProvider must be overridden in ProviderScope',
   );
 });
 
+final secureStorageServiceProvider = Provider<SecureStorageService>((ref) {
+  return SecureStorageService();
+});
+
+final apiServiceProvider = Provider<ApiService>((ref) {
+  final secureStorage = ref.watch(secureStorageServiceProvider);
+  return ApiService(secureStorage: secureStorage);
+});
+
 final themeProvider = StateNotifierProvider<ThemeNotifier, bool>((ref) {
-  final sessionService = ref.watch(sessionServiceProvider);
-  return ThemeNotifier(sessionService);
+  final preferencesService = ref.watch(preferencesServiceProvider);
+  return ThemeNotifier(preferencesService);
 });
 
 class ThemeNotifier extends StateNotifier<bool> {
-  final SessionService _sessionService;
+  final PreferencesService _preferencesService;
 
-  ThemeNotifier(this._sessionService) : super(_sessionService.isDarkMode);
+  ThemeNotifier(this._preferencesService)
+    : super(_preferencesService.isDarkMode);
 
   Future<void> toggleTheme() async {
     final next = !state;
     state = next;
-    await _sessionService.setDarkMode(next);
+    await _preferencesService.setDarkMode(next);
   }
 }
