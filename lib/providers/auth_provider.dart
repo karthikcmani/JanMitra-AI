@@ -4,8 +4,9 @@ import '../repositories/auth_repository.dart';
 import 'theme_provider.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
-  final sessionService = ref.watch(sessionServiceProvider);
-  return AuthRepository(sessionService);
+  final apiService = ref.watch(apiServiceProvider);
+  final secureStorage = ref.watch(secureStorageServiceProvider);
+  return AuthRepository(apiService: apiService, secureStorage: secureStorage);
 });
 
 class AuthState {
@@ -44,18 +45,16 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
 class AuthNotifier extends StateNotifier<AuthState> {
   final AuthRepository _authRepository;
 
-  AuthNotifier(this._authRepository)
-    : super(
-        AuthState(
-          isLoggedIn: _authRepository.isLoggedIn,
-          currentUser: _authRepository.getCurrentUser(),
-        ),
-      );
+  AuthNotifier(this._authRepository) : super(const AuthState());
 
-  void checkSession() {
-    final isLoggedIn = _authRepository.isLoggedIn;
-    final user = _authRepository.getCurrentUser();
-    state = AuthState(isLoggedIn: isLoggedIn, currentUser: user);
+  Future<void> checkSession() async {
+    final hasSession = await _authRepository.hasActiveSession();
+    if (hasSession) {
+      final user = await _authRepository.getCurrentUser();
+      state = AuthState(isLoggedIn: true, currentUser: user);
+    } else {
+      state = const AuthState(isLoggedIn: false, currentUser: null);
+    }
   }
 
   Future<AuthResult> login({
@@ -69,7 +68,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       password: password,
     );
 
-    if (result.status == AuthResultStatus.success && result.user != null) {
+    if (result.status == AuthResultStatus.success) {
       state = AuthState(
         currentUser: result.user,
         isLoggedIn: true,

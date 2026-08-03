@@ -65,21 +65,26 @@ class ProfileScreen extends ConsumerWidget {
                 border: Border.all(color: AppTheme.borderLight),
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _buildStatColumn(
-                    'Total Grievances',
-                    complaintState.totalCount.toString(),
+                  Expanded(
+                    child: _buildStatColumn(
+                      'Total Grievances',
+                      complaintState.totalCount.toString(),
+                    ),
                   ),
                   Container(height: 36, width: 1, color: AppTheme.borderLight),
-                  _buildStatColumn(
-                    'Pending',
-                    complaintState.pendingCount.toString(),
+                  Expanded(
+                    child: _buildStatColumn(
+                      'Pending',
+                      complaintState.pendingCount.toString(),
+                    ),
                   ),
                   Container(height: 36, width: 1, color: AppTheme.borderLight),
-                  _buildStatColumn(
-                    'Resolved',
-                    complaintState.resolvedCount.toString(),
+                  Expanded(
+                    child: _buildStatColumn(
+                      'Resolved',
+                      complaintState.resolvedCount.toString(),
+                    ),
                   ),
                 ],
               ),
@@ -88,55 +93,58 @@ class ProfileScreen extends ConsumerWidget {
             const SizedBox(height: 24),
 
             // Account & Settings Options
-            Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).cardTheme.color,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: AppTheme.borderLight),
-              ),
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: const Icon(
-                      Icons.dark_mode_outlined,
-                      color: AppTheme.primaryBlue,
+            Material(
+              color: Theme.of(context).cardTheme.color,
+              borderRadius: BorderRadius.circular(18),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: AppTheme.borderLight),
+                ),
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(
+                        Icons.dark_mode_outlined,
+                        color: AppTheme.primaryBlue,
+                      ),
+                      title: const Text('Dark Theme'),
+                      subtitle: Text(
+                        isDarkMode ? 'Dark Mode Enabled' : 'Light Mode Enabled',
+                      ),
+                      trailing: Switch(
+                        value: isDarkMode,
+                        onChanged: (val) {
+                          ref.read(themeProvider.notifier).toggleTheme();
+                        },
+                      ),
                     ),
-                    title: const Text('Dark Theme'),
-                    subtitle: Text(
-                      isDarkMode ? 'Dark Mode Enabled' : 'Light Mode Enabled',
+                    const Divider(height: 1, color: AppTheme.borderLight),
+                    ListTile(
+                      leading: const Icon(
+                        Icons.verified_user_outlined,
+                        color: AppTheme.primaryBlue,
+                      ),
+                      title: const Text('FastAPI Backend Service'),
+                      subtitle: const Text('JWT Secure Token Session Active'),
+                      trailing: const Icon(
+                        Icons.check_circle,
+                        color: AppTheme.success,
+                        size: 20,
+                      ),
                     ),
-                    trailing: Switch(
-                      value: isDarkMode,
-                      onChanged: (val) {
-                        ref.read(themeProvider.notifier).toggleTheme();
-                      },
+                    const Divider(height: 1, color: AppTheme.borderLight),
+                    ListTile(
+                      leading: const Icon(
+                        Icons.security_outlined,
+                        color: AppTheme.primaryBlue,
+                      ),
+                      title: const Text('Security & Privacy'),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () {},
                     ),
-                  ),
-                  const Divider(height: 1, color: AppTheme.borderLight),
-                  ListTile(
-                    leading: const Icon(
-                      Icons.verified_user_outlined,
-                      color: AppTheme.primaryBlue,
-                    ),
-                    title: const Text('Local Hive Database'),
-                    subtitle: const Text('100% Offline Persistence Active'),
-                    trailing: const Icon(
-                      Icons.check_circle,
-                      color: AppTheme.success,
-                      size: 20,
-                    ),
-                  ),
-                  const Divider(height: 1, color: AppTheme.borderLight),
-                  ListTile(
-                    leading: const Icon(
-                      Icons.security_outlined,
-                      color: AppTheme.primaryBlue,
-                    ),
-                    title: const Text('Security & Privacy'),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () {},
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 32),
@@ -178,9 +186,13 @@ class ProfileScreen extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 2),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            label,
+            maxLines: 1,
+            style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+          ),
         ),
       ],
     );

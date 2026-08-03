@@ -88,7 +88,9 @@ class AppTheme {
   );
 
   static ThemeData get lightThemeData {
-    final baseTextTheme = GoogleFonts.interTextTheme();
+    final baseTextTheme = GoogleFonts.interTextTheme(
+      ThemeData.light().textTheme,
+    );
 
     return ThemeData(
       useMaterial3: true,
@@ -107,6 +109,11 @@ class AppTheme {
         onSecondary: Colors.white,
         onSurface: textPrimary,
         onError: Colors.white,
+      ),
+      textSelectionTheme: const TextSelectionThemeData(
+        cursorColor: primaryBlue,
+        selectionColor: Color(0x400F4C81),
+        selectionHandleColor: primaryBlue,
       ),
       cardTheme: CardThemeData(
         color: lightSurface,
@@ -183,8 +190,10 @@ class AppTheme {
           borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: danger, width: 1.5),
         ),
-        labelStyle: GoogleFonts.inter(color: textSecondary, fontSize: 14),
-        hintStyle: GoogleFonts.inter(color: textMuted, fontSize: 14),
+        labelStyle: GoogleFonts.inter(color: lightTextPrimary, fontSize: 14),
+        hintStyle: GoogleFonts.inter(color: lightTextSecondary, fontSize: 14),
+        prefixIconColor: lightTextSecondary,
+        suffixIconColor: lightTextSecondary,
       ),
     );
   }
@@ -212,6 +221,11 @@ class AppTheme {
         onSurface: Colors.white,
         onError: Colors.white,
       ),
+      textSelectionTheme: const TextSelectionThemeData(
+        cursorColor: primaryBlue,
+        selectionColor: Color(0x400F4C81),
+        selectionHandleColor: primaryBlue,
+      ),
       cardTheme: CardThemeData(
         color: darkSurface,
         elevation: 0,
@@ -231,6 +245,38 @@ class AppTheme {
           fontWeight: FontWeight.w700,
           color: Colors.white,
         ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: darkSurface,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: borderDark),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: borderDark),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: primaryBlue, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: danger),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: danger, width: 1.5),
+        ),
+        labelStyle: GoogleFonts.inter(color: darkTextPrimary, fontSize: 14),
+        hintStyle: GoogleFonts.inter(color: darkTextSecondary, fontSize: 14),
+        prefixIconColor: darkTextSecondary,
+        suffixIconColor: darkTextSecondary,
       ),
     );
   }

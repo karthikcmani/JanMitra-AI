@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -16,26 +15,35 @@ class SplashScreen extends ConsumerStatefulWidget {
 }
 
 class _SplashScreenState extends ConsumerState<SplashScreen> {
-  Timer? _navigationTimer;
-
   @override
   void initState() {
     super.initState();
-    _navigationTimer = Timer(const Duration(milliseconds: 2500), () {
-      if (!mounted) return;
-      final authState = ref.read(authProvider);
-      if (authState.isLoggedIn && authState.currentUser != null) {
-        context.go('/dashboard');
-      } else {
-        context.go('/login');
-      }
-    });
+    _initializeSessionAndNavigate();
   }
 
-  @override
-  void dispose() {
-    _navigationTimer?.cancel();
-    super.dispose();
+  Future<void> _initializeSessionAndNavigate() async {
+    final startTime = DateTime.now();
+
+    // Check token & session state via Riverpod
+    await ref.read(authProvider.notifier).checkSession();
+
+    final elapsedTime = DateTime.now().difference(startTime).inMilliseconds;
+    const minSplashDuration = 1000;
+
+    if (elapsedTime < minSplashDuration) {
+      await Future.delayed(
+        Duration(milliseconds: minSplashDuration - elapsedTime),
+      );
+    }
+
+    if (!mounted) return;
+
+    final authState = ref.read(authProvider);
+    if (authState.isLoggedIn) {
+      context.go('/dashboard');
+    } else {
+      context.go('/login');
+    }
   }
 
   @override
@@ -56,8 +64,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                 children: [
                   const GovLogo(size: 110, showLabel: true)
                       .animate()
-                      .scale(duration: 800.ms, curve: Curves.easeOutBack)
-                      .fadeIn(duration: 600.ms),
+                      .scale(duration: 600.ms, curve: Curves.easeOutBack)
+                      .fadeIn(duration: 400.ms),
                   const SizedBox(height: 28),
                   Column(
                         children: [
@@ -87,8 +95,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                         ],
                       )
                       .animate()
-                      .fadeIn(delay: 300.ms, duration: 600.ms)
-                      .slideY(begin: 0.2, end: 0.0),
+                      .fadeIn(delay: 200.ms, duration: 400.ms)
+                      .slideY(begin: 0.1, end: 0.0),
                 ],
               ),
               // Bottom Version
@@ -114,7 +122,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                       color: AppTheme.primaryBlue,
                     ),
                   ),
-                ).animate().fadeIn(delay: 500.ms, duration: 500.ms),
+                ).animate().fadeIn(delay: 300.ms, duration: 300.ms),
               ),
             ],
           ),

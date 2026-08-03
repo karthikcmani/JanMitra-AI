@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../theme/app_theme.dart';
 
 class CustomTextField extends StatelessWidget {
   final TextEditingController controller;
@@ -31,15 +32,24 @@ class CustomTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final labelColor = isDark
+        ? AppTheme.darkTextPrimary
+        : AppTheme.lightTextPrimary;
+    final iconColor = isDark
+        ? AppTheme.darkTextSecondary
+        : AppTheme.lightTextSecondary;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF334155),
+            color: labelColor,
           ),
         ),
         const SizedBox(height: 6),
@@ -50,18 +60,15 @@ class CustomTextField extends StatelessWidget {
           inputFormatters: inputFormatters,
           validator: validator,
           focusNode: focusNode,
-          style: const TextStyle(
+          cursorColor: AppTheme.primaryBlue,
+          style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w500,
-            color: Color(0xFF0F172A),
+            color: textColor,
           ),
           decoration: InputDecoration(
             hintText: hint ?? 'Enter $label',
-            prefixIcon: Icon(
-              prefixIcon,
-              size: 20,
-              color: const Color(0xFF64748B),
-            ),
+            prefixIcon: Icon(prefixIcon, size: 20, color: iconColor),
             suffixIcon: isPassword
                 ? IconButton(
                     icon: Icon(
@@ -69,7 +76,7 @@ class CustomTextField extends StatelessWidget {
                           ? Icons.visibility_off_outlined
                           : Icons.visibility_outlined,
                       size: 20,
-                      color: const Color(0xFF64748B),
+                      color: iconColor,
                     ),
                     onPressed: onToggleVisibility,
                   )
