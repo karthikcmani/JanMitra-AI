@@ -51,7 +51,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final hasSession = await _authRepository.hasActiveSession();
     if (hasSession) {
       final user = await _authRepository.getCurrentUser();
-      state = AuthState(isLoggedIn: true, currentUser: user);
+      if (user != null) {
+        state = AuthState(isLoggedIn: true, currentUser: user);
+      } else {
+        state = const AuthState(isLoggedIn: false, currentUser: null);
+      }
     } else {
       state = const AuthState(isLoggedIn: false, currentUser: null);
     }
