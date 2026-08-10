@@ -1,8 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'secure_storage_service.dart';
 
 class ApiService {
-  static const String defaultBaseUrl = 'http://localhost:8000/api/v1';
+  static const String defaultBaseUrl = 'http://192.168.0.139:8000/api/v1';
 
   final Dio _dio;
   final SecureStorageService secureStorage;
@@ -26,9 +27,22 @@ class ApiService {
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
           }
+          debugPrint('--> [DIO REQUEST] ${options.method} ${options.uri}');
+          debugPrint('--> Headers: ${options.headers}');
+          if (options.data != null) {
+            debugPrint('--> Body: ${options.data}');
+          }
           return handler.next(options);
         },
+        onResponse: (response, handler) {
+          debugPrint('<-- [DIO RESPONSE ${response.statusCode}] ${response.requestOptions.uri}');
+          debugPrint('<-- Data: ${response.data}');
+          return handler.next(response);
+        },
         onError: (DioException error, handler) {
+          debugPrint('<-- [DIO ERROR ${error.response?.statusCode}] ${error.requestOptions.uri}');
+          debugPrint('<-- Error Data: ${error.response?.data}');
+          debugPrint('<-- Error Message: ${error.message}');
           return handler.next(error);
         },
       ),
