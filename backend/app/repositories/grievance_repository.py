@@ -8,6 +8,7 @@ from app.models.grievance_model import (
     GrievanceAttachment,
     GrievanceAuditLog,
     GrievanceStatus,
+    ExtractionStatus,
 )
 from app.schemas.grievance_schema import GrievanceDraftCreate
 
@@ -137,3 +138,42 @@ class GrievanceRepository:
             )
         )
         return result.scalar_one_or_none()
+
+    async def update_attachment_extraction(
+        self,
+        attachment: GrievanceAttachment,
+        extraction_status: str,
+        extracted_text: Optional[str] = None,
+        confidence_score: Optional[float] = None,
+        engine_name: Optional[str] = None,
+        error_message: Optional[str] = None,
+        actor_id: Optional[str] = None,
+    ) -> GrievanceAttachment:
+        attachment.extraction_status = extraction_status
+        attachment.raw_extracted_text = extracted_text
+        attachment.extraction_confidence = confidence_score
+        attachment.extraction_engine = engine_name
+        attachment.extraction_error = error_message
+        attachment.extracted_at = datetime.now(timezone.utc)
+
+        # Audit log entry for extraction completion or failure
+        action_type = (
+            "extraction_completed"
+            if extraction_status == ExtractionStatus.COMPLETED
+            else "extraction_failed"
+        )
+        audit_log = GrievanceAuditLog(
+            id=str(uuid.uuid4()),
+            grievance_id=attachment.grievance_id,
+            actor_id=actor_id,
+            actor_role="citizen" if actor_id else "system",
+            action_type=action_type,
+            previous_state=None,
+            new_state=extraction_status,
+            remarks=f"Extraction engine '{engine_name}' finished with status '{extraction_status}'.",
+        )
+        self.db.add(audit_log)
+
+        await self.db.flush()
+        await self.db.refresh(attachment)
+        return attachment

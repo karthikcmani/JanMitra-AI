@@ -59,6 +59,11 @@ class GrievanceAttachmentResponse(BaseModel):
     storage_path: str
     file_size_bytes: Optional[int] = None
     raw_extracted_text: Optional[str] = None
+    extraction_status: str = "pending"
+    extraction_confidence: Optional[float] = None
+    extraction_engine: Optional[str] = None
+    extraction_error: Optional[str] = None
+    extracted_at: Optional[datetime] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

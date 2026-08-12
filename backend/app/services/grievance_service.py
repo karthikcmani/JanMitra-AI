@@ -11,6 +11,10 @@ from app.schemas.grievance_schema import (
     GrievanceDraftCreate,
     GrievanceResponse,
 )
+from app.services.extraction_service import (
+    BaseExtractionAdapter,
+    NormalizedExtractionResult,
+)
 from app.services.storage_service import LocalFileSystemStorage
 
 ALLOWED_MIME_TYPES = {
@@ -179,3 +183,84 @@ class GrievanceService:
             )
 
         return abs_path, attachment.mime_type, attachment.original_filename
+
+    async def extract_attachment_content(
+        self,
+        citizen_id: str,
+        grievance_id: str,
+        attachment_id: str,
+        extractor: BaseExtractionAdapter | None = None,
+    ) -> NormalizedExtractionResult:
+        from datetime import datetime, timezone
+        from app.models.grievance_model import ExtractionStatus, GrievanceStatus
+        from app.services.extraction_service import MockExtractionAdapter
+
+        extractor_adapter = extractor or MockExtractionAdapter()
+
+        # 1. Ownership verification
+        grievance = await self.repo.get_user_grievance(grievance_id, citizen_id)
+        if not grievance:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Grievance not found.",
+            )
+
+        # 2. Attachment verification
+        attachment = await self.repo.get_attachment_for_grievance(
+            grievance_id=grievance_id, attachment_id=attachment_id
+        )
+        if not attachment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Attachment not found.",
+            )
+
+        # 3. Perform extraction via abstraction adapter
+        try:
+            abs_path = self.storage.get_absolute_path(attachment.storage_path)
+            result = await extractor_adapter.extract_content(
+                attachment=attachment, file_path=abs_path
+            )
+        except Exception as e:
+            result = NormalizedExtractionResult(
+                source_type=attachment.attachment_type,
+                source_attachment_id=attachment.id,
+                original_language="ml",
+                extracted_text=None,
+                extraction_status=ExtractionStatus.FAILED,
+                confidence_score=None,
+                engine_name="mock_adapter_v1",
+                processed_at=datetime.now(timezone.utc),
+                error_message=f"Extraction processing error: {str(e)}",
+            )
+
+        # 4. Persist extraction result into PostgreSQL database
+        updated_att = await self.repo.update_attachment_extraction(
+            attachment=attachment,
+            extraction_status=result.extraction_status,
+            extracted_text=result.extracted_text,
+            confidence_score=result.confidence_score,
+            engine_name=result.engine_name,
+            error_message=result.error_message,
+            actor_id=citizen_id,
+        )
+
+        # 5. Update grievance original_text if draft
+        if result.extraction_status == ExtractionStatus.COMPLETED and result.extracted_text:
+            if not grievance.original_text:
+                grievance.original_text = result.extracted_text
+                grievance.status = GrievanceStatus.INTAKE_RECEIVED
+                await self.repo.db.flush()
+
+        # 6. Return NormalizedExtractionResult
+        return NormalizedExtractionResult(
+            source_type=updated_att.attachment_type,
+            source_attachment_id=updated_att.id,
+            original_language="ml",
+            extracted_text=updated_att.raw_extracted_text,
+            extraction_status=updated_att.extraction_status,
+            confidence_score=updated_att.extraction_confidence,
+            engine_name=updated_att.extraction_engine or "mock_ocr_v1",
+            processed_at=updated_att.extracted_at or datetime.now(timezone.utc),
+            error_message=updated_att.extraction_error,
+        )
