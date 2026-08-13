@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.grievance_model import (
     Grievance,
+    GrievanceAttachment,
     GrievanceAuditLog,
     GrievanceStatus,
 )
@@ -79,3 +80,60 @@ class GrievanceRepository:
             .order_by(Grievance.created_at.desc())
         )
         return list(result.scalars().all())
+
+    async def create_attachment(
+        self,
+        grievance_id: str,
+        actor_id: str,
+        attachment_type: str,
+        original_filename: str,
+        mime_type: str,
+        storage_path: str,
+        file_size_bytes: Optional[int] = None,
+    ) -> GrievanceAttachment:
+        attachment = GrievanceAttachment(
+            id=str(uuid.uuid4()),
+            grievance_id=grievance_id,
+            attachment_type=attachment_type,
+            original_filename=original_filename,
+            mime_type=mime_type,
+            storage_path=storage_path,
+            file_size_bytes=file_size_bytes,
+        )
+        self.db.add(attachment)
+
+        # Record audit log for attachment addition
+        audit_log = GrievanceAuditLog(
+            id=str(uuid.uuid4()),
+            grievance_id=grievance_id,
+            actor_id=actor_id,
+            actor_role="citizen",
+            action_type="attachment_added",
+            previous_state=None,
+            new_state=None,
+            remarks=f"Attachment '{original_filename}' uploaded successfully.",
+        )
+        self.db.add(audit_log)
+
+        await self.db.flush()
+        await self.db.refresh(attachment)
+        return attachment
+
+    async def get_attachment(self, attachment_id: str) -> Optional[GrievanceAttachment]:
+        result = await self.db.execute(
+            select(GrievanceAttachment).where(
+                GrievanceAttachment.id == attachment_id
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_attachment_for_grievance(
+        self, grievance_id: str, attachment_id: str
+    ) -> Optional[GrievanceAttachment]:
+        result = await self.db.execute(
+            select(GrievanceAttachment).where(
+                GrievanceAttachment.id == attachment_id,
+                GrievanceAttachment.grievance_id == grievance_id,
+            )
+        )
+        return result.scalar_one_or_none()

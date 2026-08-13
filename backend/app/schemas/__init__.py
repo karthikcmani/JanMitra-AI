@@ -8,6 +8,7 @@ from app.schemas.grievance_schema import (
     GrievanceDraftCreate,
     GrievanceResponse,
     GrievanceAuditLogResponse,
+    GrievanceAttachmentResponse,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "GrievanceDraftCreate",
     "GrievanceResponse",
     "GrievanceAuditLogResponse",
+    "GrievanceAttachmentResponse",
 ]

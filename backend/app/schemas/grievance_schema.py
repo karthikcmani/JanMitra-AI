@@ -48,3 +48,17 @@ class GrievanceAuditLogResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class GrievanceAttachmentResponse(BaseModel):
+    id: str
+    grievance_id: str
+    attachment_type: str
+    original_filename: str
+    mime_type: str
+    storage_path: str
+    file_size_bytes: Optional[int] = None
+    raw_extracted_text: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
