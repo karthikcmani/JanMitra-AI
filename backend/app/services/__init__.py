@@ -3,6 +3,7 @@ from app.services.grievance_service import GrievanceService
 from app.services.extraction_service import (
     BaseExtractionAdapter,
     MockExtractionAdapter,
+    CloudVisionMalayalamOCR,
     NormalizedExtractionResult,
 )
 
@@ -11,5 +12,6 @@ __all__ = [
     "GrievanceService",
     "BaseExtractionAdapter",
     "MockExtractionAdapter",
+    "CloudVisionMalayalamOCR",
     "NormalizedExtractionResult",
 ]

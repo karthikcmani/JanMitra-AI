@@ -7,7 +7,7 @@ import '../screens/complaints/complaints_screen.dart';
 import '../screens/ai/ai_screen.dart';
 import '../screens/tracking/tracking_screen.dart';
 import '../screens/notifications/notifications_screen.dart';
-import '../screens/profile/profile_screen.dart';
+import '../screens/official/official_dashboard_screen.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -19,6 +19,7 @@ class AppRoutes {
   static const String tracking = '/tracking';
   static const String notifications = '/notifications';
   static const String profile = '/profile';
+  static const String officialDashboard = '/official-dashboard';
 
   static Map<String, WidgetBuilder> get routes => {
     splash: (context) => const SplashScreen(),
@@ -30,6 +31,7 @@ class AppRoutes {
     tracking: (context) => const TrackingScreen(),
     notifications: (context) => const NotificationsScreen(),
     profile: (context) => const ProfileScreen(),
+    officialDashboard: (context) => const OfficialDashboardScreen(),
   };
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {

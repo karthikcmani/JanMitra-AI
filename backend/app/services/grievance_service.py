@@ -144,6 +144,21 @@ class GrievanceService:
                 detail="Failed to record attachment metadata in database.",
             )
 
+        # 7. Automatically execute fast document OCR extraction
+        try:
+            await self.extract_attachment_content(
+                citizen_id=citizen_id,
+                grievance_id=grievance_id,
+                attachment_id=attachment.id,
+            )
+            refreshed = await self.repo.get_attachment_for_grievance(
+                grievance_id=grievance_id, attachment_id=attachment.id
+            )
+            if refreshed:
+                attachment = refreshed
+        except Exception:
+            pass  # Do not block upload if background OCR encounters non-fatal issue
+
         return GrievanceAttachmentResponse.model_validate(attachment)
 
     async def get_attachment_file(
@@ -193,9 +208,9 @@ class GrievanceService:
     ) -> NormalizedExtractionResult:
         from datetime import datetime, timezone
         from app.models.grievance_model import ExtractionStatus, GrievanceStatus
-        from app.services.extraction_service import MockExtractionAdapter
+        from app.services.extraction_service import FastAutoExtractionAdapter
 
-        extractor_adapter = extractor or MockExtractionAdapter()
+        extractor_adapter = extractor or FastAutoExtractionAdapter()
 
         # 1. Ownership verification
         grievance = await self.repo.get_user_grievance(grievance_id, citizen_id)
