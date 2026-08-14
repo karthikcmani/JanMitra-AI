@@ -1,9 +1,16 @@
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
-from sqlalchemy import ForeignKey, Integer, JSON, String, Text, DateTime
+from sqlalchemy import Float, ForeignKey, Integer, JSON, String, Text, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.session import Base
+
+
+class ExtractionStatus:
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 
 class GrievanceStatus:
@@ -130,6 +137,22 @@ class GrievanceAttachment(Base):
     storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
     file_size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     raw_extracted_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    extraction_status: Mapped[str] = mapped_column(
+        String(50),
+        default=ExtractionStatus.PENDING,
+        server_default=ExtractionStatus.PENDING,
+        nullable=False,
+    )
+    extraction_confidence: Mapped[Optional[float]] = mapped_column(
+        Float, nullable=True
+    )
+    extraction_engine: Mapped[Optional[str]] = mapped_column(
+        String(100), nullable=True
+    )
+    extraction_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    extracted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

@@ -11,6 +11,7 @@ from app.schemas.grievance_schema import (
     GrievanceResponse,
 )
 from app.schemas.user_schema import UserResponse
+from app.services.extraction_service import NormalizedExtractionResult
 from app.services.grievance_service import GrievanceService
 
 router = APIRouter(prefix="/grievances", tags=["Grievances"])
@@ -108,4 +109,24 @@ async def download_grievance_attachment(
         path=abs_path,
         media_type=mime_type,
         filename=original_filename,
+    )
+
+
+@router.post(
+    "/{grievance_id}/attachments/{attachment_id}/extract",
+    response_model=NormalizedExtractionResult,
+    status_code=status.HTTP_200_OK,
+    summary="Trigger intake content extraction for a grievance attachment",
+)
+async def extract_grievance_attachment(
+    grievance_id: str,
+    attachment_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user),
+):
+    service = GrievanceService(db)
+    return await service.extract_attachment_content(
+        citizen_id=current_user.id,
+        grievance_id=grievance_id,
+        attachment_id=attachment_id,
     )
