@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.grievance_model import (
     Grievance,
@@ -55,11 +56,18 @@ class GrievanceRepository:
 
         await self.db.flush()
         await self.db.refresh(grievance)
-        return grievance
+        res = await self.db.execute(
+            select(Grievance)
+            .options(selectinload(Grievance.audit_logs))
+            .where(Grievance.id == grievance.id)
+        )
+        return res.scalar_one()
 
     async def get_by_id(self, grievance_id: str) -> Optional[Grievance]:
         result = await self.db.execute(
-            select(Grievance).where(Grievance.id == grievance_id)
+            select(Grievance)
+            .options(selectinload(Grievance.audit_logs))
+            .where(Grievance.id == grievance_id)
         )
         return result.scalar_one_or_none()
 
@@ -67,7 +75,9 @@ class GrievanceRepository:
         self, grievance_id: str, citizen_id: str
     ) -> Optional[Grievance]:
         result = await self.db.execute(
-            select(Grievance).where(
+            select(Grievance)
+            .options(selectinload(Grievance.audit_logs))
+            .where(
                 Grievance.id == grievance_id,
                 Grievance.citizen_id == citizen_id,
             )
@@ -77,10 +87,12 @@ class GrievanceRepository:
     async def get_all_by_citizen_id(self, citizen_id: str) -> List[Grievance]:
         result = await self.db.execute(
             select(Grievance)
+            .options(selectinload(Grievance.audit_logs))
             .where(Grievance.citizen_id == citizen_id)
             .order_by(Grievance.created_at.desc())
         )
         return list(result.scalars().all())
+
 
     async def create_attachment(
         self,

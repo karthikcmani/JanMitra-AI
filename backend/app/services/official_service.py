@@ -266,8 +266,28 @@ class OfficialService:
             filter(None, [grievance.title, grievance.description, grievance.original_text] + ocr_texts)
         )
 
-        # 2. Perform Department Routing Analysis
-        routing_info = self.analyze_department_routing(combined_text)
+        # 2. Perform AI Analysis (Gemini LLM with Heuristic Fallback)
+        from app.ai.gemini_service import GeminiGrievanceAnalyzer
+        gemini_analyzer = GeminiGrievanceAnalyzer()
+        gemini_result = await gemini_analyzer.analyze_grievance(combined_text)
+
+        if gemini_result:
+            category_name = gemini_result.category
+            dept_name = gemini_result.department_name
+            statutory_ref = gemini_result.statutory_reference
+            explanation = gemini_result.reasoning
+            confidence = gemini_result.confidence_score
+            entities = {"key_entities": gemini_result.key_entities, "summary": gemini_result.summary}
+            engine_name = "Gemini_2.5_Flash_LLM"
+        else:
+            routing_info = self.analyze_department_routing(combined_text)
+            category_name = routing_info.category
+            dept_name = routing_info.department_name
+            statutory_ref = routing_info.statutory_reference
+            explanation = routing_info.legal_explanation
+            confidence = routing_info.confidence_score
+            entities = {"text_length": len(combined_text), "matched_keywords": routing_info.matched_keywords}
+            engine_name = "JanMitra_Heuristic_Rule_Engine_v1"
 
         # 3. Save or update GrievanceAnalysis record
         analysis_res = await self.db.execute(
@@ -276,32 +296,33 @@ class OfficialService:
         analysis = analysis_res.scalar_one_or_none()
 
         legal_refs = {
-            "statutory_act": routing_info.statutory_reference,
-            "matched_keywords": routing_info.matched_keywords,
-            "confidence_score": routing_info.confidence_score,
-            "engine": "JanMitra_RAG_Legal_Engine_v1",
+            "statutory_act": statutory_ref,
+            "confidence_score": confidence,
+            "engine": engine_name,
         }
 
         if not analysis:
             analysis = GrievanceAnalysis(
                 grievance_id=grievance_id,
-                extracted_entities={"text_length": len(combined_text)},
-                predicted_category=routing_info.department_name,
+                extracted_entities=entities,
+                predicted_category=dept_name,
                 legal_grounding_references=legal_refs,
-                ai_explanation=routing_info.legal_explanation,
+                ai_explanation=explanation,
             )
             self.db.add(analysis)
         else:
-            analysis.predicted_category = routing_info.department_name
+            analysis.extracted_entities = entities
+            analysis.predicted_category = dept_name
             analysis.legal_grounding_references = legal_refs
-            analysis.ai_explanation = routing_info.legal_explanation
+            analysis.ai_explanation = explanation
 
         # 4. Update Grievance state
         prev_status = grievance.status
-        grievance.category = routing_info.category
-        grievance.department_id = routing_info.department_name
+        grievance.category = category_name
+        grievance.department_id = dept_name
         grievance.status = GrievanceStatus.UNDER_ANALYSIS
         grievance.updated_at = datetime.now(timezone.utc)
+
 
         # 5. Log audit trail
         audit_log = GrievanceAuditLog(

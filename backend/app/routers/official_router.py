@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_db
-from app.dependencies.auth_deps import get_current_user
+from app.dependencies.auth_deps import get_current_official_or_admin
 from app.schemas.user_schema import UserResponse
 from app.services.official_service import (
     OfficialActionRequest,
@@ -22,7 +22,7 @@ router = APIRouter(prefix="/official", tags=["Official Copilot"])
 )
 async def get_all_grievances_for_official(
     db: AsyncSession = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user),
+    current_user: UserResponse = Depends(get_current_official_or_admin),
 ):
     service = OfficialService(db)
     return await service.get_all_official_grievances()
@@ -37,7 +37,7 @@ async def get_all_grievances_for_official(
 async def process_document_and_route_grievance(
     grievance_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user),
+    current_user: UserResponse = Depends(get_current_official_or_admin),
 ):
     service = OfficialService(db)
     return await service.process_document_and_route(
@@ -55,9 +55,10 @@ async def submit_official_action(
     grievance_id: str,
     action_in: OfficialActionRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user),
+    current_user: UserResponse = Depends(get_current_official_or_admin),
 ):
     service = OfficialService(db)
     return await service.update_official_action(
         grievance_id=grievance_id, official_id=current_user.id, action_in=action_in
     )
+

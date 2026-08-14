@@ -279,3 +279,34 @@ class GrievanceService:
             processed_at=updated_att.extracted_at or datetime.now(timezone.utc),
             error_message=updated_att.extraction_error,
         )
+
+    async def submit_clarification(
+        self, citizen_id: str, grievance_id: str, response_text: str
+    ) -> GrievanceResponse:
+        from app.models.grievance_model import GrievanceAuditLog, GrievanceStatus
+        grievance = await self.repo.get_user_grievance(grievance_id, citizen_id)
+        if not grievance:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Grievance not found.",
+            )
+
+        prev_status = grievance.status
+        grievance.status = GrievanceStatus.UNDER_PROCESSING
+
+        audit_log = GrievanceAuditLog(
+            id=str(uuid.uuid4()),
+            grievance_id=grievance_id,
+            actor_id=citizen_id,
+            actor_role="citizen",
+            action_type="CLARIFICATION_PROVIDED",
+            previous_state=prev_status,
+            new_state=grievance.status,
+            remarks=f"Citizen Clarification Response: {response_text}",
+        )
+        self.repo.db.add(audit_log)
+        await self.repo.db.commit()
+
+        updated = await self.repo.get_user_grievance(grievance_id, citizen_id)
+        return GrievanceResponse.model_validate(updated)
+

@@ -1,7 +1,8 @@
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 from app.models.grievance_model import GrievanceStatus, IntakeMode
+
 
 
 class GrievanceDraftCreate(BaseModel):
@@ -16,24 +17,9 @@ class GrievanceDraftCreate(BaseModel):
     location_sources: Optional[Dict[str, Any]] = None
 
 
-class GrievanceResponse(BaseModel):
-    id: str
-    grievance_number: str
-    citizen_id: str
-    title: Optional[str] = None
-    description: Optional[str] = None
-    intake_mode: str
-    original_language: str
-    original_text: Optional[str] = None
-    translated_text: Optional[str] = None
-    status: str
-    priority: str
-    confirmed_location: Optional[Dict[str, Any]] = None
-    location_sources: Optional[Dict[str, Any]] = None
-    created_at: datetime
-    updated_at: datetime
+class GrievanceClarificationRequest(BaseModel):
+    response_text: str = Field(..., min_length=1)
 
-    model_config = ConfigDict(from_attributes=True)
 
 
 class GrievanceAuditLogResponse(BaseModel):
@@ -48,6 +34,33 @@ class GrievanceAuditLogResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class GrievanceResponse(BaseModel):
+    id: str
+    grievance_number: str
+    citizen_id: str
+    title: Optional[str] = None
+    description: Optional[str] = None
+    intake_mode: str
+    original_language: str
+    original_text: Optional[str] = None
+    translated_text: Optional[str] = None
+    status: str
+    priority: str
+    category: Optional[str] = None
+    department_id: Optional[str] = None
+    confirmed_location: Optional[Dict[str, Any]] = None
+    location_sources: Optional[Dict[str, Any]] = None
+    audit_logs: List[GrievanceAuditLogResponse] = []
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+
+
 
 
 class GrievanceAttachmentResponse(BaseModel):

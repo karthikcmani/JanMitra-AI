@@ -112,6 +112,13 @@ async def download_grievance_attachment(
     )
 
 
+from app.schemas.grievance_schema import (
+    GrievanceAttachmentResponse,
+    GrievanceClarificationRequest,
+    GrievanceDraftCreate,
+    GrievanceResponse,
+)
+
 @router.post(
     "/{grievance_id}/attachments/{attachment_id}/extract",
     response_model=NormalizedExtractionResult,
@@ -130,3 +137,24 @@ async def extract_grievance_attachment(
         grievance_id=grievance_id,
         attachment_id=attachment_id,
     )
+
+
+@router.post(
+    "/{grievance_id}/clarification",
+    response_model=GrievanceResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Submit citizen response to an official clarification request",
+)
+async def submit_citizen_clarification(
+    grievance_id: str,
+    clarification_in: GrievanceClarificationRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user),
+):
+    service = GrievanceService(db)
+    return await service.submit_clarification(
+        citizen_id=current_user.id,
+        grievance_id=grievance_id,
+        response_text=clarification_in.response_text,
+    )
+

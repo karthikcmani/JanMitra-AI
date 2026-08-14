@@ -3,6 +3,7 @@ import os
 import sys
 import time
 from pathlib import Path
+import pytest
 from app.database.session import AsyncSessionLocal
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -16,7 +17,9 @@ from app.services.grievance_service import GrievanceService
 from app.services.official_service import OfficialActionRequest, OfficialService
 
 
+@pytest.mark.asyncio
 async def test_official_workflow():
+
     print("=" * 70)
     print("JanMitra AI — Official Login, OCR Processing & Department Routing Test")
     print("=" * 70)

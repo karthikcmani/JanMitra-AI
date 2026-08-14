@@ -48,3 +48,26 @@ async def get_current_user(
         )
 
     return UserResponse.model_validate(user)
+
+
+async def get_current_official_or_admin(
+    current_user: UserResponse = Depends(get_current_user),
+) -> UserResponse:
+    if current_user.role not in ["official", "admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Official or Admin access required",
+        )
+    return current_user
+
+
+async def get_current_admin(
+    current_user: UserResponse = Depends(get_current_user),
+) -> UserResponse:
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Admin access required",
+        )
+    return current_user
+
