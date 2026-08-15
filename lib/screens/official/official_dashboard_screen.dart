@@ -138,7 +138,8 @@ class _OfficialDashboardScreenState extends State<OfficialDashboardScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFF00A896).withOpacity(0.1),
+                color: const Color(0xFF00A896).withValues(alpha: 0.1),
+
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: const Color(0xFF00A896)),
               ),

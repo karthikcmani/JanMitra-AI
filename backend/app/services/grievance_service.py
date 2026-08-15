@@ -306,7 +306,9 @@ class GrievanceService:
         )
         self.repo.db.add(audit_log)
         await self.repo.db.commit()
+        self.repo.db.expire_all()
 
         updated = await self.repo.get_user_grievance(grievance_id, citizen_id)
         return GrievanceResponse.model_validate(updated)
+
 
