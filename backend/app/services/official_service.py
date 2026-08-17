@@ -29,6 +29,18 @@ class DepartmentRoutingInfo(BaseModel):
     legal_explanation: str
 
 
+class AIDecisionSupportPanel(BaseModel):
+    suggested_department: str
+    priority: str
+    reasoning: str
+    key_facts: List[str] = []
+    statutory_relevance: str
+    missing_information: str
+    suggested_next_step: str
+    confidence_score: float
+    disclaimer: str = "AI-assisted recommendation. Administrative official retains final decision-making responsibility."
+
+
 class OfficialGrievanceDetailResponse(BaseModel):
     id: str
     grievance_number: str
@@ -48,12 +60,36 @@ class OfficialGrievanceDetailResponse(BaseModel):
     category: Optional[str] = None
     legal_grounding_references: Optional[Dict[str, Any]] = None
     ai_explanation: Optional[str] = None
+    decision_support: Optional[AIDecisionSupportPanel] = None
     attachments: List[Dict[str, Any]] = []
     audit_logs: List[Dict[str, Any]] = []
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class OfficialDashboardSummaryResponse(BaseModel):
+    total_grievances: int
+    pending: int
+    under_processing: int
+    clarification_required: int
+    forwarded: int
+    resolved: int
+    high_priority: int
+    today_received: int
+    recent_grievances: List[OfficialGrievanceDetailResponse] = []
+
+
+class DepartmentWorkloadResponse(BaseModel):
+    department_name: str
+    pending: int
+    under_processing: int
+    clarification_required: int
+    forwarded: int
+    resolved: int
+    total: int
+
 
 
 class OfficialActionRequest(BaseModel):
@@ -176,6 +212,35 @@ class OfficialService:
             )
             audit_logs = logs_res.scalars().all()
 
+            # Build Decision Support Panel
+            dept_suggestion = g.department_id or (analysis.predicted_category if analysis else "Revenue & General Administration")
+            statutory_info = analysis.legal_grounding_references.get("statutory_act", "Kerala Public Services Act, 2012") if (analysis and analysis.legal_grounding_references) else "Kerala Public Services Act, 2012"
+            explanation_text = analysis.ai_explanation if (analysis and analysis.ai_explanation) else "Assigned based on natural language petition context."
+            confidence_val = float(analysis.legal_grounding_references.get("confidence_score", 0.85)) if (analysis and analysis.legal_grounding_references) else 0.85
+
+            missing_info = "None identified."
+            if g.status == GrievanceStatus.CLARIFICATION_REQUIRED:
+                missing_info = "Official requested additional evidence/land details from citizen."
+            elif not raw_ocr and g.intake_mode == "ocr_handwritten":
+                missing_info = "Petition scan attached but OCR text not yet extracted."
+
+            next_step = "Review petition evidence and assign to Executive Engineer."
+            if g.status == GrievanceStatus.CLARIFICATION_REQUIRED:
+                next_step = "Awaiting citizen clarification response."
+            elif g.status == GrievanceStatus.FORWARDED:
+                next_step = "Track departmental resolution progress with assigned officer."
+
+            decision_panel = AIDecisionSupportPanel(
+                suggested_department=dept_suggestion,
+                priority=g.priority,
+                reasoning=explanation_text,
+                key_facts=[f"Category: {g.category or 'General'}", f"Language: {g.original_language}"],
+                statutory_relevance=statutory_info,
+                missing_information=missing_info,
+                suggested_next_step=next_step,
+                confidence_score=confidence_val,
+            )
+
             results.append(
                 OfficialGrievanceDetailResponse(
                     id=g.id,
@@ -196,6 +261,7 @@ class OfficialService:
                     category=g.category,
                     legal_grounding_references=analysis.legal_grounding_references if analysis else None,
                     ai_explanation=analysis.ai_explanation if analysis else None,
+                    decision_support=decision_panel,
                     attachments=[
                         {
                             "id": a.id,
@@ -214,7 +280,7 @@ class OfficialService:
                             "previous_state": l.previous_state,
                             "new_state": l.new_state,
                             "remarks": l.remarks,
-                            "created_at": l.created_at,
+                            "created_at": l.created_at.isoformat(),
                         }
                         for l in audit_logs
                     ],
@@ -380,3 +446,117 @@ class OfficialService:
         grievances = await self.get_all_official_grievances()
         matched = [g for g in grievances if g.id == grievance_id]
         return matched[0] if matched else grievances[0]
+
+    async def get_dashboard_summary(self) -> OfficialDashboardSummaryResponse:
+        all_grievances = await self.get_all_official_grievances()
+        total = len(all_grievances)
+
+        pending_count = sum(1 for g in all_grievances if g.status in ("draft", "intake_received", "under_analysis"))
+        under_processing_count = sum(1 for g in all_grievances if g.status == "under_processing")
+        clarification_count = sum(1 for g in all_grievances if g.status == "clarification_required")
+        forwarded_count = sum(1 for g in all_grievances if g.status == "forwarded")
+        resolved_count = sum(1 for g in all_grievances if g.status in ("resolved", "closed"))
+        high_priority_count = sum(1 for g in all_grievances if g.priority.lower() in ("high", "critical"))
+
+        start_of_today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        today_count = sum(1 for g in all_grievances if g.created_at >= start_of_today)
+
+        recent = all_grievances[:5]
+
+        return OfficialDashboardSummaryResponse(
+            total_grievances=total,
+            pending=pending_count,
+            under_processing=under_processing_count,
+            clarification_required=clarification_count,
+            forwarded=forwarded_count,
+            resolved=resolved_count,
+            high_priority=high_priority_count,
+            today_received=today_count,
+            recent_grievances=recent,
+        )
+
+    async def search_official_grievances(
+        self,
+        query: Optional[str] = None,
+        status: Optional[str] = None,
+        priority: Optional[str] = None,
+        department_id: Optional[str] = None,
+        category: Optional[str] = None,
+    ) -> List[OfficialGrievanceDetailResponse]:
+        all_grievances = await self.get_all_official_grievances()
+        filtered = []
+
+        for g in all_grievances:
+            if status and g.status.lower() != status.lower():
+                continue
+            if priority and g.priority.lower() != priority.lower():
+                continue
+            if department_id and g.assigned_department and department_id.lower() not in g.assigned_department.lower():
+                continue
+            if category and g.category and category.lower() not in g.category.lower():
+                continue
+            if query and query.strip():
+                q = query.strip().lower()
+                text_match = (
+                    q in (g.title or "").lower()
+                    or q in (g.description or "").lower()
+                    or q in g.grievance_number.lower()
+                    or q in (g.original_text or "").lower()
+                    or q in (g.citizen_name or "").lower()
+                )
+                if not text_match:
+                    continue
+            filtered.append(g)
+
+        return filtered
+
+    async def get_attention_queue(self) -> List[OfficialGrievanceDetailResponse]:
+        all_grievances = await self.get_all_official_grievances()
+
+        def attention_sort_key(g: OfficialGrievanceDetailResponse):
+            priority_score = 0
+            if g.priority.lower() in ("critical", "high"):
+                priority_score = 3
+            elif g.status == "clarification_required":
+                priority_score = 2
+            elif g.status in ("under_analysis", "intake_received"):
+                priority_score = 1
+
+            return (priority_score, -g.created_at.timestamp())
+
+        sorted_queue = sorted(all_grievances, key=attention_sort_key, reverse=True)
+        return sorted_queue
+
+    async def get_department_workload(self) -> List[DepartmentWorkloadResponse]:
+        all_grievances = await self.get_all_official_grievances()
+        depts = [
+            "Kerala Water Authority (KWA)",
+            "Public Works Department (PWD)",
+            "Kerala State Electricity Board (KSEB)",
+            "Local Self Government Department (LSGD / Panchayat)",
+            "Revenue & General Administration",
+        ]
+
+        workloads = []
+        for d in depts:
+            dept_g = [g for g in all_grievances if g.assigned_department == d or g.predicted_department == d]
+            pending = sum(1 for g in dept_g if g.status in ("draft", "intake_received", "under_analysis"))
+            under_proc = sum(1 for g in dept_g if g.status == "under_processing")
+            clarification = sum(1 for g in dept_g if g.status == "clarification_required")
+            forwarded = sum(1 for g in dept_g if g.status == "forwarded")
+            resolved = sum(1 for g in dept_g if g.status in ("resolved", "closed"))
+
+            workloads.append(
+                DepartmentWorkloadResponse(
+                    department_name=d,
+                    pending=pending,
+                    under_processing=under_proc,
+                    clarification_required=clarification,
+                    forwarded=forwarded,
+                    resolved=resolved,
+                    total=len(dept_g),
+                )
+            )
+
+        return workloads
+
