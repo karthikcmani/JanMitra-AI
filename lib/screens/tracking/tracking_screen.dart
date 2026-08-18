@@ -92,13 +92,13 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                 const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
                   initialValue: _selectedId,
+                  isExpanded: true,
                   dropdownColor: Theme.of(context).brightness == Brightness.dark
-
                       ? AppTheme.darkSurface
                       : Colors.white,
                   style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
                     color: Theme.of(context).brightness == Brightness.dark
                         ? Colors.white
                         : Colors.black87,
@@ -108,8 +108,9 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                         (g) => DropdownMenuItem(
                           value: g.id,
                           child: Text(
-                            '${g.grievanceNumber} - ${g.title ?? "Grievance Intake"}',
+                            '${g.grievanceNumber} • ${g.getDisplayTitle()}',
                             overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
                           ),
                         ),
                       )
@@ -119,7 +120,10 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                       _selectedId = val;
                     });
                   },
-                  decoration: const InputDecoration(),
+                  decoration: InputDecoration(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
                 ),
                 const SizedBox(height: 20),
 
@@ -181,6 +185,9 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   }
 
   Widget _buildSummaryCard(GrievanceModel grievance) {
+    final displayTitle = grievance.getDisplayTitle();
+    final shortBriefing = grievance.getShortBriefing();
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -224,11 +231,34 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
           ),
           const SizedBox(height: 10),
           Text(
-            grievance.title ?? 'No title provided',
+            displayTitle,
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
           ),
-          if (grievance.departmentId != null) ...[
+          if (shortBriefing != null && shortBriefing.isNotEmpty) ...[
             const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : AppTheme.lightBg,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.borderLight),
+              ),
+              child: Text(
+                'Briefing: $shortBriefing',
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppTheme.textSecondary,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ],
+          if (grievance.departmentId != null) ...[
+            const SizedBox(height: 8),
             Row(
               children: [
                 const Icon(Icons.account_balance_outlined, size: 14, color: AppTheme.primaryBlue),

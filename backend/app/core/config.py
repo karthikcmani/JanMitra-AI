@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from typing import List, Union
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -25,6 +26,9 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     REFRESH_TOKEN_EXPIRE_MINUTES: int = 10080
 
+    GEMINI_API_KEY: str = ""
+    GOOGLE_API_KEY: str = ""
+
     CORS_ORIGINS: Union[List[str], str] = [
         "http://localhost",
         "http://localhost:3000",
@@ -33,7 +37,12 @@ class Settings(BaseSettings):
     ]
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(
+            str(Path(__file__).resolve().parent.parent.parent / "backend" / ".env"),
+            str(Path(__file__).resolve().parent.parent.parent / ".env"),
+            "backend/.env",
+            ".env",
+        ),
         env_file_encoding="utf-8",
         extra="ignore",
     )
