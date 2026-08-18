@@ -34,14 +34,14 @@ class OfficialDashboardSummaryModel {
         : [];
 
     return OfficialDashboardSummaryModel(
-      totalGrievances: (json['total_grievances'] ?? 0) as int,
-      pending: (json['pending'] ?? 0) as int,
-      underProcessing: (json['under_processing'] ?? 0) as int,
-      clarificationRequired: (json['clarification_required'] ?? 0) as int,
-      forwarded: (json['forwarded'] ?? 0) as int,
-      resolved: (json['resolved'] ?? 0) as int,
-      highPriority: (json['high_priority'] ?? 0) as int,
-      todayReceived: (json['today_received'] ?? 0) as int,
+      totalGrievances: (json['total_grievances'] as num?)?.toInt() ?? 0,
+      pending: (json['pending'] as num?)?.toInt() ?? 0,
+      underProcessing: (json['under_processing'] as num?)?.toInt() ?? 0,
+      clarificationRequired: (json['clarification_required'] as num?)?.toInt() ?? 0,
+      forwarded: (json['forwarded'] as num?)?.toInt() ?? 0,
+      resolved: (json['resolved'] as num?)?.toInt() ?? 0,
+      highPriority: (json['high_priority'] as num?)?.toInt() ?? 0,
+      todayReceived: (json['today_received'] as num?)?.toInt() ?? 0,
       recentGrievances: recent,
     );
   }
@@ -68,13 +68,13 @@ class DepartmentWorkloadModel {
 
   factory DepartmentWorkloadModel.fromJson(Map<String, dynamic> json) {
     return DepartmentWorkloadModel(
-      departmentName: (json['department_name'] ?? '') as String,
-      pending: (json['pending'] ?? 0) as int,
-      underProcessing: (json['under_processing'] ?? 0) as int,
-      clarificationRequired: (json['clarification_required'] ?? 0) as int,
-      forwarded: (json['forwarded'] ?? 0) as int,
-      resolved: (json['resolved'] ?? 0) as int,
-      total: (json['total'] ?? 0) as int,
+      departmentName: (json['department_name'] ?? '').toString(),
+      pending: (json['pending'] as num?)?.toInt() ?? 0,
+      underProcessing: (json['under_processing'] as num?)?.toInt() ?? 0,
+      clarificationRequired: (json['clarification_required'] as num?)?.toInt() ?? 0,
+      forwarded: (json['forwarded'] as num?)?.toInt() ?? 0,
+      resolved: (json['resolved'] as num?)?.toInt() ?? 0,
+      total: (json['total'] as num?)?.toInt() ?? 0,
     );
   }
 }

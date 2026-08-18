@@ -108,33 +108,33 @@ class GrievanceModel {
     }
 
     return GrievanceModel(
-      id: json['id'] as String,
-      grievanceNumber: (json['grievance_number'] ?? json['id']) as String,
-      citizenId: (json['citizen_id'] ?? '') as String,
-      citizenName: json['citizen_name'] as String?,
-      citizenPhone: json['citizen_phone'] as String?,
-      title: json['title'] as String?,
-      description: json['description'] as String?,
-      intakeMode: (json['intake_mode'] ?? 'direct_text') as String,
-      originalLanguage: (json['original_language'] ?? 'ml') as String,
-      originalText: json['original_text'] as String?,
-      translatedText: json['translated_text'] as String?,
-      status: (json['status'] ?? 'draft') as String,
-      priority: (json['priority'] ?? 'medium') as String,
-      category: json['category'] as String?,
-      departmentId: json['department_id'] as String?,
-      rawOcrText: json['raw_ocr_text'] as String?,
-      predictedDepartment: json['predicted_department'] as String?,
-      assignedDepartment: json['assigned_department'] as String?,
-      aiExplanation: json['ai_explanation'] as String?,
+      id: (json['id'] ?? '').toString(),
+      grievanceNumber: (json['grievance_number'] ?? json['id'] ?? '').toString(),
+      citizenId: (json['citizen_id'] ?? '').toString(),
+      citizenName: json['citizen_name']?.toString(),
+      citizenPhone: json['citizen_phone']?.toString(),
+      title: json['title']?.toString(),
+      description: json['description']?.toString(),
+      intakeMode: (json['intake_mode'] ?? 'direct_text').toString(),
+      originalLanguage: (json['original_language'] ?? 'ml').toString(),
+      originalText: json['original_text']?.toString(),
+      translatedText: json['translated_text']?.toString(),
+      status: (json['status'] ?? 'draft').toString(),
+      priority: (json['priority'] ?? 'medium').toString(),
+      category: json['category']?.toString(),
+      departmentId: (json['department_id'] ?? json['assigned_department'] ?? json['predicted_department'])?.toString(),
+      rawOcrText: json['raw_ocr_text']?.toString(),
+      predictedDepartment: json['predicted_department']?.toString(),
+      assignedDepartment: json['assigned_department']?.toString(),
+      aiExplanation: json['ai_explanation']?.toString(),
       decisionSupport: ds,
       auditLogs: parsedLogs,
-      createdAt: DateTime.parse(
-        (json['created_at'] ?? DateTime.now().toIso8601String()) as String,
-      ),
-      updatedAt: DateTime.parse(
-        (json['updated_at'] ?? DateTime.now().toIso8601String()) as String,
-      ),
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      updatedAt: json['updated_at'] != null
+          ? DateTime.tryParse(json['updated_at'].toString()) ?? DateTime.now()
+          : DateTime.now(),
     );
   }
   /// Returns a clean, human-readable title for the grievance.
