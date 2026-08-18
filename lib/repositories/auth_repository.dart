@@ -82,7 +82,8 @@ class AuthRepository {
           e.type == DioExceptionType.receiveTimeout ||
           e.type == DioExceptionType.connectionError) {
         errorMessage =
-            'Network connection failed. Cannot reach FastAPI backend (${apiService.dio.options.baseUrl}).';
+            'Network connection failed. Ensure FastAPI backend server is running (${apiService.dio.options.baseUrl}).';
+
       }
 
       return AuthResult(

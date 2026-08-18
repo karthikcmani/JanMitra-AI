@@ -14,8 +14,15 @@ class ApiService {
     if (envUrl.isNotEmpty) {
       return envUrl;
     }
-    return fallbackDevUrl;
+    if (kIsWeb ||
+        defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.linux) {
+      return 'http://localhost:8000/api/v1';
+    }
+    return 'http://10.0.2.2:8000/api/v1';
   }
+
 
   final Dio _dio;
   final SecureStorageService secureStorage;
