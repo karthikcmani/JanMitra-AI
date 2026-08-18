@@ -3,15 +3,27 @@ import 'package:dio/dio.dart';
 import 'secure_storage_service.dart';
 
 class ApiService {
-  static const String defaultBaseUrl = 'http://192.168.0.139:8000/api/v1';
+  /// Default local development fallback URL
+  static const String fallbackDevUrl = 'http://10.0.2.2:8000/api/v1';
+
+  /// Resolves the API Base URL in order of precedence:
+  /// 1. `--dart-define=API_BASE_URL=...` supplied at runtime/build-time
+  /// 2. `fallbackDevUrl` (`http://10.0.2.2:8000/api/v1`)
+  static String get defaultBaseUrl {
+    const envUrl = String.fromEnvironment('API_BASE_URL');
+    if (envUrl.isNotEmpty) {
+      return envUrl;
+    }
+    return fallbackDevUrl;
+  }
 
   final Dio _dio;
   final SecureStorageService secureStorage;
 
-  ApiService({String baseUrl = defaultBaseUrl, required this.secureStorage})
+  ApiService({String? baseUrl, required this.secureStorage})
     : _dio = Dio(
         BaseOptions(
-          baseUrl: baseUrl,
+          baseUrl: baseUrl ?? defaultBaseUrl,
           connectTimeout: const Duration(seconds: 10),
           receiveTimeout: const Duration(seconds: 10),
           headers: {

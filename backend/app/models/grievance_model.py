@@ -19,11 +19,13 @@ class GrievanceStatus:
     CITIZEN_VERIFIED = "citizen_verified"
     GROUPING_CONFIRMED = "grouping_confirmed"
     AI_ANALYSIS_INTERVIEW = "ai_analysis_interview"
+    UNDER_ANALYSIS = "under_analysis"
     FINALIZED = "finalized"
     AUTHORITY_RECOMMENDED = "authority_recommended"
     ADMINISTRATIVE_REVIEW = "administrative_review"
     FORWARDED = "forwarded"
     UNDER_PROCESSING = "under_processing"
+    CLARIFICATION_REQUIRED = "clarification_required"
     RESOLVED = "resolved"
     CLOSED = "closed"
 
@@ -88,6 +90,8 @@ class Grievance(Base):
     )
     confirmed_location: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     location_sources: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    category: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
+    department_id: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -108,6 +112,12 @@ class Grievance(Base):
     )
     audit_logs: Mapped[List["GrievanceAuditLog"]] = relationship(
         "GrievanceAuditLog",
+        back_populates="grievance",
+        cascade="all, delete-orphan",
+    )
+    analysis: Mapped[Optional["GrievanceAnalysis"]] = relationship(
+        "GrievanceAnalysis",
+        uselist=False,
         back_populates="grievance",
         cascade="all, delete-orphan",
     )
@@ -199,3 +209,31 @@ class GrievanceAuditLog(Base):
 
     grievance = relationship("Grievance", back_populates="audit_logs")
     actor = relationship("User")
+
+
+class GrievanceAnalysis(Base):
+    __tablename__ = "grievance_analysis"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+        index=True,
+    )
+    grievance_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("grievances.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    extracted_entities: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    predicted_category: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
+    legal_grounding_references: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    ai_explanation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    grievance = relationship("Grievance", back_populates="analysis")
