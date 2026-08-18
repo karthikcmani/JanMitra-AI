@@ -206,17 +206,17 @@ class GrievanceAuditLogModel {
 
   factory GrievanceAuditLogModel.fromJson(Map<String, dynamic> json) {
     return GrievanceAuditLogModel(
-      id: json['id'] as String,
-      grievanceId: json['grievance_id'] as String,
-      actorId: json['actor_id'] as String?,
-      actorRole: (json['actor_role'] ?? 'citizen') as String,
-      actionType: (json['action_type'] ?? '') as String,
-      previousState: json['previous_state'] as String?,
-      newState: json['new_state'] as String?,
-      remarks: json['remarks'] as String?,
-      createdAt: DateTime.parse(
-        (json['created_at'] ?? DateTime.now().toIso8601String()) as String,
-      ),
+      id: (json['id'] ?? '').toString(),
+      grievanceId: (json['grievance_id'] ?? '').toString(),
+      actorId: json['actor_id']?.toString(),
+      actorRole: (json['actor_role'] ?? 'citizen').toString(),
+      actionType: (json['action_type'] ?? '').toString(),
+      previousState: json['previous_state']?.toString(),
+      newState: json['new_state']?.toString(),
+      remarks: json['remarks']?.toString(),
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
+          : DateTime.now(),
     );
   }
 }
@@ -257,24 +257,24 @@ class GrievanceAttachmentModel {
 
   factory GrievanceAttachmentModel.fromJson(Map<String, dynamic> json) {
     return GrievanceAttachmentModel(
-      id: json['id'] as String,
-      grievanceId: json['grievance_id'] as String,
-      attachmentType: json['attachment_type'] as String,
-      originalFilename: json['original_filename'] as String,
-      mimeType: json['mime_type'] as String,
-      storagePath: json['storage_path'] as String,
-      fileSizeBytes: json['file_size_bytes'] as int?,
-      rawExtractedText: json['raw_extracted_text'] as String?,
-      extractionStatus: (json['extraction_status'] ?? 'pending') as String,
+      id: (json['id'] ?? '').toString(),
+      grievanceId: (json['grievance_id'] ?? '').toString(),
+      attachmentType: (json['attachment_type'] ?? '').toString(),
+      originalFilename: (json['original_filename'] ?? '').toString(),
+      mimeType: (json['mime_type'] ?? '').toString(),
+      storagePath: (json['storage_path'] ?? '').toString(),
+      fileSizeBytes: (json['file_size_bytes'] as num?)?.toInt(),
+      rawExtractedText: json['raw_extracted_text']?.toString(),
+      extractionStatus: (json['extraction_status'] ?? 'pending').toString(),
       extractionConfidence: (json['extraction_confidence'] as num?)?.toDouble(),
-      extractionEngine: json['extraction_engine'] as String?,
-      extractionError: json['extraction_error'] as String?,
+      extractionEngine: json['extraction_engine']?.toString(),
+      extractionError: json['extraction_error']?.toString(),
       extractedAt: json['extracted_at'] != null
-          ? DateTime.parse(json['extracted_at'] as String)
+          ? DateTime.tryParse(json['extracted_at'].toString())
           : null,
-      createdAt: DateTime.parse(
-        (json['created_at'] ?? DateTime.now().toIso8601String()) as String,
-      ),
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
+          : DateTime.now(),
     );
   }
 }
@@ -304,17 +304,17 @@ class NormalizedExtractionResultModel {
 
   factory NormalizedExtractionResultModel.fromJson(Map<String, dynamic> json) {
     return NormalizedExtractionResultModel(
-      sourceType: json['source_type'] as String,
-      sourceAttachmentId: json['source_attachment_id'] as String?,
-      originalLanguage: (json['original_language'] ?? 'ml') as String,
-      extractedText: json['extracted_text'] as String?,
-      extractionStatus: json['extraction_status'] as String,
+      sourceType: (json['source_type'] ?? '').toString(),
+      sourceAttachmentId: json['source_attachment_id']?.toString(),
+      originalLanguage: (json['original_language'] ?? 'ml').toString(),
+      extractedText: json['extracted_text']?.toString(),
+      extractionStatus: (json['extraction_status'] ?? '').toString(),
       confidenceScore: (json['confidence_score'] as num?)?.toDouble(),
-      engineName: json['engine_name'] as String,
-      processedAt: DateTime.parse(
-        (json['processed_at'] ?? DateTime.now().toIso8601String()) as String,
-      ),
-      errorMessage: json['error_message'] as String?,
+      engineName: (json['engine_name'] ?? '').toString(),
+      processedAt: json['processed_at'] != null
+          ? DateTime.tryParse(json['processed_at'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      errorMessage: json['error_message']?.toString(),
     );
   }
 }
