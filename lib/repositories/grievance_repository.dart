@@ -74,4 +74,17 @@ class GrievanceRepository {
     final response = await apiService.get('/grievances/$id');
     return GrievanceModel.fromJson(response.data as Map<String, dynamic>);
   }
+
+  /// Submits citizen response to an official clarification request
+  Future<GrievanceModel> submitClarification({
+    required String grievanceId,
+    required String responseText,
+  }) async {
+    final response = await apiService.post(
+      '/grievances/$grievanceId/clarification',
+      data: {'response_text': responseText},
+    );
+    return GrievanceModel.fromJson(response.data as Map<String, dynamic>);
+  }
 }
+

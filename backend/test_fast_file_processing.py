@@ -1,13 +1,16 @@
 import asyncio
 import sys
 from pathlib import Path
+import pytest
 from app.models.grievance_model import GrievanceAttachment, AttachmentType
 from app.services.extraction_service import FastAutoExtractionAdapter
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
+@pytest.mark.asyncio
 async def test_fast_processing():
+
     print("=" * 65)
     print("JanMitra AI — Fast Uploaded File OCR & Intelligence Processing")
     print("=" * 65)

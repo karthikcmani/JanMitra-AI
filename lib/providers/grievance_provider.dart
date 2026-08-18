@@ -9,6 +9,12 @@ final grievanceRepositoryProvider = Provider<GrievanceRepository>((ref) {
   return GrievanceRepository(apiService);
 });
 
+final myGrievancesProvider = FutureProvider.autoDispose<List<GrievanceModel>>((ref) async {
+  final repository = ref.watch(grievanceRepositoryProvider);
+  return await repository.getMyGrievances();
+});
+
+
 enum IntakeExtractionStep {
   idle,
   uploading,

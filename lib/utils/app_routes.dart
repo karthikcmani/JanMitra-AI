@@ -7,7 +7,9 @@ import '../screens/complaints/complaints_screen.dart';
 import '../screens/ai/ai_screen.dart';
 import '../screens/tracking/tracking_screen.dart';
 import '../screens/notifications/notifications_screen.dart';
+import '../screens/profile/profile_screen.dart';
 import '../screens/official/official_dashboard_screen.dart';
+
 
 class AppRoutes {
   static const String splash = '/';

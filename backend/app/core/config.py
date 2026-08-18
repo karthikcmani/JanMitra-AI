@@ -10,9 +10,10 @@ class Settings(BaseSettings):
 
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "postgres"
-    POSTGRES_SERVER: str = "172.26.206.129"
+    POSTGRES_SERVER: str = "localhost"
     POSTGRES_PORT: int = 5432
     POSTGRES_DB: str = "janmitra_ai"
+
 
     DATABASE_URL: str = ""
     SYNC_DATABASE_URL: str = ""

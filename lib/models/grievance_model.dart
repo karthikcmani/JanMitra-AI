@@ -10,6 +10,9 @@ class GrievanceModel {
   final String? translatedText;
   final String status;
   final String priority;
+  final String? category;
+  final String? departmentId;
+  final List<GrievanceAuditLogModel> auditLogs;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -25,11 +28,22 @@ class GrievanceModel {
     this.translatedText,
     required this.status,
     required this.priority,
+    this.category,
+    this.departmentId,
+    this.auditLogs = const [],
     required this.createdAt,
     required this.updatedAt,
   });
 
   factory GrievanceModel.fromJson(Map<String, dynamic> json) {
+    var rawLogs = json['audit_logs'] as List<dynamic>?;
+    List<GrievanceAuditLogModel> parsedLogs = rawLogs != null
+        ? rawLogs
+            .map((item) =>
+                GrievanceAuditLogModel.fromJson(item as Map<String, dynamic>))
+            .toList()
+        : [];
+
     return GrievanceModel(
       id: json['id'] as String,
       grievanceNumber: (json['grievance_number'] ?? json['id']) as String,
@@ -42,6 +56,9 @@ class GrievanceModel {
       translatedText: json['translated_text'] as String?,
       status: (json['status'] ?? 'draft') as String,
       priority: (json['priority'] ?? 'medium') as String,
+      category: json['category'] as String?,
+      departmentId: json['department_id'] as String?,
+      auditLogs: parsedLogs,
       createdAt: DateTime.parse(
         (json['created_at'] ?? DateTime.now().toIso8601String()) as String,
       ),
@@ -51,6 +68,47 @@ class GrievanceModel {
     );
   }
 }
+
+class GrievanceAuditLogModel {
+  final String id;
+  final String grievanceId;
+  final String? actorId;
+  final String actorRole;
+  final String actionType;
+  final String? previousState;
+  final String? newState;
+  final String? remarks;
+  final DateTime createdAt;
+
+  const GrievanceAuditLogModel({
+    required this.id,
+    required this.grievanceId,
+    this.actorId,
+    required this.actorRole,
+    required this.actionType,
+    this.previousState,
+    this.newState,
+    this.remarks,
+    required this.createdAt,
+  });
+
+  factory GrievanceAuditLogModel.fromJson(Map<String, dynamic> json) {
+    return GrievanceAuditLogModel(
+      id: json['id'] as String,
+      grievanceId: json['grievance_id'] as String,
+      actorId: json['actor_id'] as String?,
+      actorRole: (json['actor_role'] ?? 'citizen') as String,
+      actionType: (json['action_type'] ?? '') as String,
+      previousState: json['previous_state'] as String?,
+      newState: json['new_state'] as String?,
+      remarks: json['remarks'] as String?,
+      createdAt: DateTime.parse(
+        (json['created_at'] ?? DateTime.now().toIso8601String()) as String,
+      ),
+    );
+  }
+}
+
 
 class GrievanceAttachmentModel {
   final String id;
