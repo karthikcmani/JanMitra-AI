@@ -91,8 +91,9 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                 ),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
-                  value: _selectedId,
+                  initialValue: _selectedId,
                   dropdownColor: Theme.of(context).brightness == Brightness.dark
+
                       ? AppTheme.darkSurface
                       : Colors.white,
                   style: TextStyle(
@@ -314,51 +315,57 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
               text: _isSubmittingClarification ? 'Submitting...' : 'Submit Clarification Response',
               onPressed: _isSubmittingClarification
                   ? null
-                  : () async {
-                      final text = _clarificationController.text.trim();
-                      if (text.isEmpty) return;
-                      setState(() {
-                        _isSubmittingClarification = true;
-                      });
-                      try {
-                        final repo = ref.read(grievanceRepositoryProvider);
-                        await repo.submitClarification(
-                          grievanceId: grievance.id,
-                          responseText: text,
-                        );
-                        _clarificationController.clear();
-                        ref.invalidate(myGrievancesProvider);
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Clarification response submitted successfully!'),
-                              backgroundColor: AppTheme.success,
-                            ),
-                          );
-                        }
-                      } catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Error: ${e.toString()}'),
-                              backgroundColor: AppTheme.danger,
-                            ),
-                          );
-                        }
-                      } finally {
-                        if (mounted) {
-                          setState(() {
-                            _isSubmittingClarification = false;
-                          });
-                        }
-                      }
+                  : () {
+                      _handleClarificationSubmit(grievance);
                     },
             ),
           ),
+
         ],
       ),
     );
   }
+
+  void _handleClarificationSubmit(GrievanceModel grievance) async {
+    final text = _clarificationController.text.trim();
+    if (text.isEmpty) return;
+    setState(() {
+      _isSubmittingClarification = true;
+    });
+    try {
+      final repo = ref.read(grievanceRepositoryProvider);
+      await repo.submitClarification(
+        grievanceId: grievance.id,
+        responseText: text,
+      );
+      _clarificationController.clear();
+      ref.invalidate(myGrievancesProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Clarification response submitted successfully!'),
+            backgroundColor: AppTheme.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmittingClarification = false;
+        });
+      }
+    }
+  }
+
 
   Widget _buildLiveAuditTimeline(GrievanceModel grievance) {
     final logs = grievance.auditLogs;
