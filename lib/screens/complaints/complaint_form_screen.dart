@@ -133,6 +133,7 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
             onPressed: () {
               Navigator.of(context).pop();
               ref.read(grievanceIntakeProvider.notifier).reset();
+              ref.invalidate(myGrievancesProvider);
               context.pop();
             },
             child: const Text('OK'),

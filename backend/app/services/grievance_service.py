@@ -46,6 +46,20 @@ class GrievanceService:
             draft_in=draft_in,
             grievance_number=grievance_no,
         )
+
+        # Trigger AI analysis for direct_text grievances immediately
+        if draft_in.intake_mode == "direct_text" or draft_in.original_text or draft_in.description:
+            try:
+                from app.services.official_service import OfficialService
+                official_service = OfficialService(self.repo.db)
+                await official_service.process_grievance_ai(db_grievance.id)
+                # Refresh to load AI analysis and updated department/status
+                refreshed = await self.repo.get_by_id(db_grievance.id)
+                if refreshed:
+                    db_grievance = refreshed
+            except Exception:
+                pass
+
         return GrievanceResponse.model_validate(db_grievance)
 
     async def get_citizen_grievances(

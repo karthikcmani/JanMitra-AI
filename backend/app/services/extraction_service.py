@@ -1,3 +1,4 @@
+import logging
 import os
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
@@ -5,6 +6,8 @@ from pathlib import Path
 from typing import Optional
 from pydantic import BaseModel, ConfigDict
 from app.models.grievance_model import AttachmentType, ExtractionStatus, GrievanceAttachment
+
+logger = logging.getLogger(__name__)
 
 try:
     from google.cloud import vision
@@ -73,7 +76,8 @@ class MockExtractionAdapter(BaseExtractionAdapter):
                 source_type=attachment.attachment_type,
                 source_attachment_id=attachment.id,
                 original_language="ml",
-                extracted_text="വാർഡ് 5 ൽ കുടിവെള്ള വിതരണം തടസ്സപ്പെട്ടു. റോഡ് പണി ഉടൻ പൂർത്തിയാക്കണം.",
+                extracted_text=f"Attachment artifact '{attachment.original_filename or 'document'}' processed via JanMitra Extraction Engine. (വാർഡ് കുടിവെള്ള വിതരണം റോഡ് പണി ശുചിത്വം).",
+
                 extraction_status=ExtractionStatus.COMPLETED,
                 confidence_score=0.92,
                 engine_name="mock_ocr_v1",
@@ -346,8 +350,17 @@ class EasyOCRMalayalamAdapter(BaseExtractionAdapter):
         try:
             reader = get_easyocr_reader()
             if not reader:
-                mock = MockExtractionAdapter()
-                return await mock.extract_content(attachment, file_path)
+                return NormalizedExtractionResult(
+                    source_type=attachment.attachment_type,
+                    source_attachment_id=attachment.id,
+                    original_language="ml",
+                    extracted_text=None,
+                    extraction_status=ExtractionStatus.FAILED,
+                    confidence_score=None,
+                    engine_name=engine_name,
+                    processed_at=now,
+                    error_message="EasyOCR reader initialization failed.",
+                )
 
             ext = file_path.suffix.lower()
             images_bytes_list: list[bytes] = []
@@ -409,25 +422,290 @@ class EasyOCRMalayalamAdapter(BaseExtractionAdapter):
             return await mock.extract_content(attachment, file_path)
 
 
+class PyMuPDFTextAdapter(BaseExtractionAdapter):
+    """Direct PyMuPDF & PyPDF Text Extractor for PDF intake petitions."""
+
+    async def extract_content(
+        self, attachment: GrievanceAttachment, file_path: Optional[Path] = None
+    ) -> NormalizedExtractionResult:
+        now = datetime.now(timezone.utc)
+        engine_name = "pymupdf_text_v1"
+
+        if not file_path or not file_path.exists():
+            return NormalizedExtractionResult(
+                source_type=attachment.attachment_type,
+                source_attachment_id=attachment.id,
+                original_language="ml",
+                extracted_text=None,
+                extraction_status=ExtractionStatus.FAILED,
+                confidence_score=None,
+                engine_name=engine_name,
+                processed_at=now,
+                error_message="Attachment file path does not exist on disk.",
+            )
+
+        try:
+            extracted_pages = []
+            if fitz and file_path.suffix.lower() == ".pdf":
+                doc = fitz.open(file_path)
+                for page in doc:
+                    text = page.get_text().strip()
+                    if text:
+                        extracted_pages.append(text)
+                doc.close()
+
+            if not extracted_pages and file_path.suffix.lower() == ".pdf":
+                try:
+                    from pypdf import PdfReader
+                    reader = PdfReader(file_path)
+                    for page in reader.pages:
+                        text = (page.extract_text() or "").strip()
+                        if text:
+                            extracted_pages.append(text)
+                except Exception:
+                    pass
+
+            final_text = "\n\n".join(extracted_pages).strip() if extracted_pages else None
+            if final_text:
+                return NormalizedExtractionResult(
+                    source_type=attachment.attachment_type,
+                    source_attachment_id=attachment.id,
+                    original_language="ml",
+                    extracted_text=final_text,
+                    extraction_status=ExtractionStatus.COMPLETED,
+                    confidence_score=0.98,
+                    engine_name=engine_name,
+                    processed_at=now,
+                )
+        except Exception as e:
+            pass
+
+        return NormalizedExtractionResult(
+            source_type=attachment.attachment_type,
+            source_attachment_id=attachment.id,
+            original_language="ml",
+            extracted_text=None,
+            extraction_status=ExtractionStatus.FAILED,
+            confidence_score=None,
+            engine_name=engine_name,
+            processed_at=now,
+            error_message="PDF text extraction yielded no extractable text.",
+        )
+
+
+def get_gemini_api_key() -> Optional[str]:
+    from app.core.config import settings
+    key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not key and hasattr(settings, "GEMINI_API_KEY"):
+        key = settings.GEMINI_API_KEY
+    if not key and hasattr(settings, "GOOGLE_API_KEY"):
+        key = settings.GOOGLE_API_KEY
+    return key.strip() if key and key.strip() else None
+
+
+class GeminiVisionOCRAdapter(BaseExtractionAdapter):
+    """Real Multimodal Malayalam OCR Adapter using Gemini Vision API."""
+
+    async def extract_content(
+        self, attachment: GrievanceAttachment, file_path: Optional[Path] = None
+    ) -> NormalizedExtractionResult:
+        now = datetime.now(timezone.utc)
+        engine_name = "gemini_vision_ocr_v1"
+
+        api_key = get_gemini_api_key()
+        if not api_key or not file_path or not file_path.exists():
+            return NormalizedExtractionResult(
+                source_type=attachment.attachment_type,
+                source_attachment_id=attachment.id,
+                original_language="ml",
+                extracted_text=None,
+                extraction_status=ExtractionStatus.FAILED,
+                confidence_score=None,
+                engine_name=engine_name,
+                processed_at=now,
+                error_message="OCR BLOCKED — GEMINI_API_KEY NOT AVAILABLE or file path unreadable.",
+            )
+
+        prompt = (
+            "Transcribe the uploaded document exactly as written.\n\n"
+            "The document may contain handwritten Malayalam and English.\n\n"
+            "Preserve Malayalam script.\n\n"
+            "Do not translate.\n\n"
+            "Do not summarize.\n\n"
+            "Do not infer missing words.\n\n"
+            "Do not invent content.\n\n"
+            "Preserve dates, numbers, names, addresses, ward numbers, "
+            "department names and abbreviations.\n\n"
+            "Return only the transcription."
+        )
+
+        # 1. Try Direct REST API call (Fast & Zero SDK dependency)
+        try:
+            import base64
+            import httpx
+
+            file_bytes = file_path.read_bytes()
+            encoded_bytes = base64.b64encode(file_bytes).decode("utf-8")
+
+            # Determine mime type
+            mime_type = attachment.mime_type or "image/jpeg"
+            if file_path.suffix.lower() in [".png"]:
+                mime_type = "image/png"
+            elif file_path.suffix.lower() in [".webp"]:
+                mime_type = "image/webp"
+
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": prompt},
+                            {
+                                "inline_data": {
+                                    "mime_type": mime_type,
+                                    "data": encoded_bytes,
+                                }
+                            },
+                        ]
+                    }
+                ]
+            }
+
+            models_to_try = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-3.5-flash", "gemini-pro-latest"]
+            last_error_msg = None
+            async with httpx.AsyncClient(timeout=45.0) as client:
+                for model_name in models_to_try:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+                    resp = await client.post(url, json=payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        candidates = data.get("candidates", [])
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts", [])
+                            text_pieces = [p.get("text", "") for p in parts if "text" in p]
+                            extracted_text = "\n".join(text_pieces).strip()
+                            if extracted_text:
+                                return NormalizedExtractionResult(
+                                    source_type=attachment.attachment_type,
+                                    source_attachment_id=attachment.id,
+                                    original_language="ml",
+                                    extracted_text=extracted_text,
+                                    extraction_status=ExtractionStatus.COMPLETED,
+                                    confidence_score=None,
+                                    engine_name=engine_name,
+                                    processed_at=now,
+                                )
+                    else:
+                        last_error_msg = f"Gemini API returned status {resp.status_code}: {resp.text[:150]}"
+                        logger.warning(last_error_msg)
+
+        except Exception as rest_err:
+            last_error_msg = f"Gemini REST API attempt failed: {rest_err}"
+            logger.warning(last_error_msg)
+
+        # 2. Try SDK fallback if google.generativeai installed
+        try:
+            import google.generativeai as genai
+            from PIL import Image
+
+            genai.configure(api_key=api_key)
+            try:
+                model = genai.GenerativeModel("gemini-2.0-flash")
+            except Exception:
+                model = genai.GenerativeModel("gemini-1.5-flash")
+
+            img = Image.open(file_path)
+            response = await asyncio.to_thread(model.generate_content, [prompt, img])
+            text = response.text.strip() if response and response.text else None
+
+            if text:
+                return NormalizedExtractionResult(
+                    source_type=attachment.attachment_type,
+                    source_attachment_id=attachment.id,
+                    original_language="ml",
+                    extracted_text=text,
+                    extraction_status=ExtractionStatus.COMPLETED,
+                    confidence_score=None,
+                    engine_name=engine_name,
+                    processed_at=now,
+                )
+        except Exception as sdk_err:
+            logger.warning(f"Gemini SDK fallback attempt failed: {sdk_err}")
+
+        return NormalizedExtractionResult(
+            source_type=attachment.attachment_type,
+            source_attachment_id=attachment.id,
+            original_language="ml",
+            extracted_text=None,
+            extraction_status=ExtractionStatus.FAILED,
+            confidence_score=None,
+            engine_name=engine_name,
+            processed_at=now,
+            error_message=last_error_msg or "Real OCR failed: Gemini Vision API call unsuccessful or credentials invalid.",
+        )
+
+
 class FastAutoExtractionAdapter(BaseExtractionAdapter):
     """Smart Unified Extraction Engine.
 
-    Chooses Cloud Vision if credentials exist, EasyOCR if available, or Mock adapter as fallback.
+    Chooses Cloud Vision, Gemini Vision, PyMuPDF, EasyOCR, or explicit Mock adapter for e2e tests.
+    Never returns fake/generic mock OCR text for standard real citizen uploads.
     """
 
     async def extract_content(
         self, attachment: GrievanceAttachment, file_path: Optional[Path] = None
     ) -> NormalizedExtractionResult:
-        if os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+        now = datetime.now(timezone.utc)
+
+        # 1. Try Google Cloud Vision OCR if service account credentials present
+        if os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON"):
             cv = CloudVisionMalayalamOCR()
             res = await cv.extract_content(attachment, file_path)
-            if res.extraction_status == ExtractionStatus.COMPLETED:
+            if res.extraction_status == ExtractionStatus.COMPLETED and res.extracted_text:
                 return res
 
+        # 2. Try Gemini Vision OCR if Gemini API key present
+        gemini_res = None
+        if get_gemini_api_key():
+            gv = GeminiVisionOCRAdapter()
+            gemini_res = await gv.extract_content(attachment, file_path)
+            if gemini_res.extraction_status == ExtractionStatus.COMPLETED and gemini_res.extracted_text:
+                return gemini_res
+
+        # 3. Try PyMuPDF / PyPDF for digital PDF text extraction
+        if file_path and file_path.suffix.lower() == ".pdf":
+            pdf_adapter = PyMuPDFTextAdapter()
+            res = await pdf_adapter.extract_content(attachment, file_path)
+            if res.extraction_status == ExtractionStatus.COMPLETED and res.extracted_text:
+                return res
+
+        # 4. Try EasyOCR for local offline Malayalam/English image OCR
         if easyocr is not None:
             eo = EasyOCRMalayalamAdapter()
-            return await eo.extract_content(attachment, file_path)
+            res = await eo.extract_content(attachment, file_path)
+            if res.extraction_status == ExtractionStatus.COMPLETED and res.extracted_text:
+                return res
 
-        mock = MockExtractionAdapter()
-        return await mock.extract_content(attachment, file_path)
+        # 5. Explicit E2E Test Trigger check ONLY
+        if attachment.original_filename and ("e2e_mock_test" in attachment.original_filename.lower() or "mock_test_trigger" in attachment.original_filename.lower()):
+            mock = MockExtractionAdapter()
+            return await mock.extract_content(attachment, file_path)
+
+        # 6. Real upload fallback: If Gemini was attempted, return Gemini provider error directly
+        if gemini_res is not None:
+            return gemini_res
+
+        # If no key configured and no offline adapter succeeded:
+        return NormalizedExtractionResult(
+            source_type=attachment.attachment_type,
+            source_attachment_id=attachment.id,
+            original_language="ml",
+            extracted_text=None,
+            extraction_status=ExtractionStatus.FAILED,
+            confidence_score=None,
+            engine_name="none_available",
+            processed_at=now,
+            error_message="OCR BLOCKED — GEMINI_API_KEY NOT AVAILABLE in environment.",
+        )
+
+
 

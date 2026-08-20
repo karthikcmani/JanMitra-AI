@@ -1,4 +1,47 @@
+class AIDecisionSupportModel {
+
+  final String suggestedDepartment;
+  final String priority;
+  final String reasoning;
+  final List<String> keyFacts;
+  final String statutoryRelevance;
+  final String missingInformation;
+  final String suggestedNextStep;
+  final double confidenceScore;
+  final String disclaimer;
+
+  const AIDecisionSupportModel({
+    required this.suggestedDepartment,
+    required this.priority,
+    required this.reasoning,
+    required this.keyFacts,
+    required this.statutoryRelevance,
+    required this.missingInformation,
+    required this.suggestedNextStep,
+    required this.confidenceScore,
+    required this.disclaimer,
+  });
+
+  factory AIDecisionSupportModel.fromJson(Map<String, dynamic> json) {
+    var rawFacts = json['key_facts'] as List<dynamic>?;
+    List<String> facts = rawFacts != null ? rawFacts.map((e) => e.toString()).toList() : [];
+
+    return AIDecisionSupportModel(
+      suggestedDepartment: (json['suggested_department'] ?? '') as String,
+      priority: (json['priority'] ?? 'medium') as String,
+      reasoning: (json['reasoning'] ?? '') as String,
+      keyFacts: facts,
+      statutoryRelevance: (json['statutory_relevance'] ?? '') as String,
+      missingInformation: (json['missing_information'] ?? '') as String,
+      suggestedNextStep: (json['suggested_next_step'] ?? '') as String,
+      confidenceScore: ((json['confidence_score'] ?? 0.85) as num).toDouble(),
+      disclaimer: (json['disclaimer'] ?? 'AI-assisted recommendation.') as String,
+    );
+  }
+}
+
 class GrievanceModel {
+
   final String id;
   final String grievanceNumber;
   final String citizenId;
@@ -12,6 +55,13 @@ class GrievanceModel {
   final String priority;
   final String? category;
   final String? departmentId;
+  final String? citizenName;
+  final String? citizenPhone;
+  final String? rawOcrText;
+  final String? predictedDepartment;
+  final String? assignedDepartment;
+  final String? aiExplanation;
+  final AIDecisionSupportModel? decisionSupport;
   final List<GrievanceAuditLogModel> auditLogs;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -20,6 +70,8 @@ class GrievanceModel {
     required this.id,
     required this.grievanceNumber,
     required this.citizenId,
+    this.citizenName,
+    this.citizenPhone,
     this.title,
     this.description,
     required this.intakeMode,
@@ -30,10 +82,16 @@ class GrievanceModel {
     required this.priority,
     this.category,
     this.departmentId,
+    this.rawOcrText,
+    this.predictedDepartment,
+    this.assignedDepartment,
+    this.aiExplanation,
+    this.decisionSupport,
     this.auditLogs = const [],
     required this.createdAt,
     required this.updatedAt,
   });
+
 
   factory GrievanceModel.fromJson(Map<String, dynamic> json) {
     var rawLogs = json['audit_logs'] as List<dynamic>?;
@@ -44,10 +102,17 @@ class GrievanceModel {
             .toList()
         : [];
 
+    AIDecisionSupportModel? ds;
+    if (json['decision_support'] != null && json['decision_support'] is Map<String, dynamic>) {
+      ds = AIDecisionSupportModel.fromJson(json['decision_support'] as Map<String, dynamic>);
+    }
+
     return GrievanceModel(
       id: json['id'] as String,
       grievanceNumber: (json['grievance_number'] ?? json['id']) as String,
       citizenId: (json['citizen_id'] ?? '') as String,
+      citizenName: json['citizen_name'] as String?,
+      citizenPhone: json['citizen_phone'] as String?,
       title: json['title'] as String?,
       description: json['description'] as String?,
       intakeMode: (json['intake_mode'] ?? 'direct_text') as String,
@@ -58,6 +123,11 @@ class GrievanceModel {
       priority: (json['priority'] ?? 'medium') as String,
       category: json['category'] as String?,
       departmentId: json['department_id'] as String?,
+      rawOcrText: json['raw_ocr_text'] as String?,
+      predictedDepartment: json['predicted_department'] as String?,
+      assignedDepartment: json['assigned_department'] as String?,
+      aiExplanation: json['ai_explanation'] as String?,
+      decisionSupport: ds,
       auditLogs: parsedLogs,
       createdAt: DateTime.parse(
         (json['created_at'] ?? DateTime.now().toIso8601String()) as String,
@@ -66,6 +136,48 @@ class GrievanceModel {
         (json['updated_at'] ?? DateTime.now().toIso8601String()) as String,
       ),
     );
+  }
+  /// Returns a clean, human-readable title for the grievance.
+  String getDisplayTitle() {
+    if (title != null && title!.isNotEmpty && !title!.startsWith('Handwritten Petition Intake:')) {
+      return title!;
+    }
+
+    final sourceText = description ?? originalText ?? rawOcrText;
+    if (sourceText != null && sourceText.trim().isNotEmpty) {
+      final clean = sourceText.trim();
+      final lines = clean.split('\n');
+      for (final line in lines) {
+        final trimmed = line.trim();
+        if (trimmed.toLowerCase().startsWith('വിഷയം:') || trimmed.toLowerCase().startsWith('subject:')) {
+          final subjectPart = trimmed.substring(trimmed.indexOf(':') + 1).trim();
+          if (subjectPart.isNotEmpty) {
+            return subjectPart.length > 55 ? '${subjectPart.substring(0, 55)}...' : subjectPart;
+          }
+        }
+      }
+      for (final line in lines) {
+        final trimmed = line.trim();
+        if (trimmed.isNotEmpty && !trimmed.toLowerCase().startsWith('പരാതി തീയതി')) {
+          return trimmed.length > 55 ? '${trimmed.substring(0, 55)}...' : trimmed;
+        }
+      }
+      return clean.length > 55 ? '${clean.substring(0, 55)}...' : clean;
+    }
+
+    if (title != null && title!.isNotEmpty) {
+      return title!;
+    }
+
+    return 'Malayalam Petition Intake ($grievanceNumber)';
+  }
+
+  /// Returns a short briefing excerpt for previewing in cards and tracking dropdowns.
+  String? getShortBriefing() {
+    final text = description ?? originalText ?? rawOcrText;
+    if (text == null || text.trim().isEmpty) return null;
+    final clean = text.trim().replaceAll(RegExp(r'\s+'), ' ');
+    return clean.length > 110 ? '${clean.substring(0, 110)}...' : clean;
   }
 }
 

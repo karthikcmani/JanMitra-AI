@@ -62,5 +62,9 @@ __pycache__/
 .vscode/
 .idea/
 
+# Storage & uploaded files
+storage/
+backend/.env
+
 # Binaries
 cloudflared.exe

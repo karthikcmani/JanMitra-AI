@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/complaint_provider.dart';
+import '../../providers/grievance_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../theme/app_theme.dart';
+import '../main_citizen_shell.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -12,9 +13,19 @@ class ProfileScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
-    final complaintState = ref.watch(complaintProvider);
+    final grievancesAsync = ref.watch(myGrievancesProvider);
     final isDarkMode = ref.watch(themeProvider);
     final user = authState.currentUser;
+
+    int totalCount = 0;
+    int pendingCount = 0;
+    int resolvedCount = 0;
+
+    grievancesAsync.whenData((list) {
+      totalCount = list.length;
+      resolvedCount = list.where((g) => g.status.toLowerCase() == 'resolved' || g.status.toLowerCase() == 'closed').length;
+      pendingCount = list.length - resolvedCount;
+    });
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -56,37 +67,45 @@ class ProfileScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 28),
 
-            // Statistics Summary Card
+            // Statistics Summary Card (Live count & Clickable)
             Container(
-              padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
                 color: Theme.of(context).cardTheme.color,
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(color: AppTheme.borderLight),
               ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _buildStatColumn(
-                      'Total Grievances',
-                      complaintState.totalCount.toString(),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _buildStatColumn(
+                        context,
+                        'Total Grievances',
+                        totalCount.toString(),
+                        onTap: () => MainCitizenShellController.of(context)?.onSelectTab(1),
+                      ),
                     ),
-                  ),
-                  Container(height: 36, width: 1, color: AppTheme.borderLight),
-                  Expanded(
-                    child: _buildStatColumn(
-                      'Pending',
-                      complaintState.pendingCount.toString(),
+                    Container(height: 36, width: 1, color: AppTheme.borderLight),
+                    Expanded(
+                      child: _buildStatColumn(
+                        context,
+                        'Pending',
+                        pendingCount.toString(),
+                        onTap: () => MainCitizenShellController.of(context)?.onSelectTab(1),
+                      ),
                     ),
-                  ),
-                  Container(height: 36, width: 1, color: AppTheme.borderLight),
-                  Expanded(
-                    child: _buildStatColumn(
-                      'Resolved',
-                      complaintState.resolvedCount.toString(),
+                    Container(height: 36, width: 1, color: AppTheme.borderLight),
+                    Expanded(
+                      child: _buildStatColumn(
+                        context,
+                        'Resolved',
+                        resolvedCount.toString(),
+                        onTap: () => MainCitizenShellController.of(context)?.onSelectTab(1),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
 
@@ -174,27 +193,39 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildStatColumn(String label, String value) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-            color: AppTheme.primaryBlue,
-          ),
+  Widget _buildStatColumn(
+    BuildContext context,
+    String label,
+    String value, {
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.primaryBlue,
+              ),
+            ),
+            const SizedBox(height: 2),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                maxLines: 1,
+                style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 2),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(
-            label,
-            maxLines: 1,
-            style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

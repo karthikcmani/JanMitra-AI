@@ -61,7 +61,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           behavior: SnackBarBehavior.floating,
         ),
       );
-      context.go('/dashboard');
+      if (result.user?.role == 'admin') {
+        context.go('/admin-dashboard');
+      } else if (result.user?.role == 'official') {
+        context.go('/official-dashboard');
+      } else {
+        context.go('/dashboard');
+      }
+
+
     } else {
       // Show exact failure message (Email not registered OR Incorrect password)
       ScaffoldMessenger.of(context).showSnackBar(

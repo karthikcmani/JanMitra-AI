@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../models/grievance_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../repositories/official_repository.dart';
 import '../../theme/app_theme.dart';
+
 
 class OfficialDashboardScreen extends ConsumerStatefulWidget {
   const OfficialDashboardScreen({super.key});
@@ -237,7 +240,18 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
             },
             tooltip: 'Refresh Workspace Data',
           ),
+          IconButton(
+            icon: const Icon(Icons.logout_rounded),
+            onPressed: () async {
+              final router = GoRouter.of(context);
+              await ref.read(authProvider.notifier).logout();
+              router.go('/login');
+            },
+            tooltip: 'Sign Out',
+          ),
+
         ],
+
       ),
       body: RefreshIndicator(
         onRefresh: () async {

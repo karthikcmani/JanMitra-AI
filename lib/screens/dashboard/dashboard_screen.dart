@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../models/grievance_model.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/complaint_provider.dart';
+import '../../providers/grievance_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/constants.dart';
 import '../../widgets/stat_card.dart';
@@ -90,8 +91,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
-    final complaintState = ref.watch(complaintProvider);
+    final myGrievancesAsync = ref.watch(myGrievancesProvider);
     final user = authState.currentUser;
+
+    int totalCount = 0;
+    int pendingCount = 0;
+    int resolvedCount = 0;
+
+    myGrievancesAsync.whenData((list) {
+      totalCount = list.length;
+      pendingCount = list.where((g) => g.status.toLowerCase() != 'resolved').length;
+      resolvedCount = list.where((g) => g.status.toLowerCase() == 'resolved').length;
+    });
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -122,11 +133,25 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ],
         ),
         actions: [
+          if (user?.role == 'admin')
+            IconButton(
+              icon: const Icon(Icons.shield_outlined, color: Colors.amber),
+              tooltip: 'Admin Portal',
+              onPressed: () => context.go('/admin-dashboard'),
+            )
+          else if (user?.role == 'official')
+            IconButton(
+              icon: const Icon(Icons.admin_panel_settings_rounded, color: AppTheme.secondaryTeal),
+              tooltip: 'Official Workspace',
+              onPressed: () => context.go('/official-dashboard'),
+            ),
+
           IconButton(
             icon: const Icon(Icons.logout_rounded),
             tooltip: 'Sign Out',
             onPressed: _handleLogout,
           ),
+
           Padding(
             padding: const EdgeInsets.only(right: 16, left: 4),
             child: GestureDetector(
@@ -167,9 +192,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ),
             const SizedBox(height: 12),
             _buildStatisticsGrid(
-              total: complaintState.totalCount,
-              pending: complaintState.pendingCount,
-              resolved: complaintState.resolvedCount,
+              total: totalCount,
+              pending: pendingCount,
+              resolved: resolvedCount,
             ),
 
             const SizedBox(height: 24),
@@ -185,7 +210,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             const SizedBox(height: 24),
 
             // Recent Activity Section
-            _buildRecentActivityCard(complaintState),
+            _buildRecentActivityCard(myGrievancesAsync),
 
             const SizedBox(height: 16),
           ],
@@ -289,6 +314,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               iconColor: AppTheme.primaryBlue,
               iconBgColor: const Color(0xFFE0F2FE),
               subtitle: 'Grievances',
+              onTap: () => MainCitizenShellController.of(context)?.onSelectTab(1),
             ),
             StatCard(
               title: 'Pending',
@@ -297,6 +323,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               iconColor: AppTheme.warning,
               iconBgColor: const Color(0xFFFEF3C7),
               subtitle: 'In Progress',
+              onTap: () => MainCitizenShellController.of(context)?.onSelectTab(1),
             ),
             StatCard(
               title: 'Resolved',
@@ -305,6 +332,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               iconColor: AppTheme.success,
               iconBgColor: const Color(0xD1D1FADF),
               subtitle: 'Completed',
+              onTap: () => MainCitizenShellController.of(context)?.onSelectTab(1),
             ),
           ],
         );
@@ -409,9 +437,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildRecentActivityCard(ComplaintState complaintState) {
-    final recentComplaints = complaintState.complaints.take(3).toList();
-
+  Widget _buildRecentActivityCard(AsyncValue<List<GrievanceModel>> grievancesAsync) {
     return Material(
       color: Theme.of(context).cardTheme.color,
       borderRadius: BorderRadius.circular(AppConstants.cardRadius),
@@ -440,84 +466,74 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            if (recentComplaints.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16.0),
-                child: Center(
-                  child: Text(
-                    'No grievances submitted yet. Tap "New Grievance" to start!',
-                    style: TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              )
-            else
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: recentComplaints.length,
-                separatorBuilder: (context, index) =>
-                    const Divider(color: AppTheme.borderLight, height: 16),
-                itemBuilder: (context, index) {
-                  final complaint = recentComplaints[index];
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      '${complaint.title} (${complaint.id})',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    subtitle: Text(
-                      '${complaint.department} • ${complaint.category}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                    trailing: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _getStatusColor(complaint.status).withAlpha(20),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+            grievancesAsync.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (err, _) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16.0),
+                child: Text('Error: ${err.toString()}', style: const TextStyle(color: AppTheme.danger)),
+              ),
+              data: (list) {
+                final recent = list.take(3).toList();
+                if (recent.isEmpty) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16.0),
+                    child: Center(
                       child: Text(
-                        complaint.status,
+                        'No grievances submitted yet. Tap "File Grievance" to start!',
                         style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: _getStatusColor(complaint.status),
+                          color: AppTheme.textSecondary,
+                          fontSize: 13,
                         ),
                       ),
                     ),
-                    onTap: () => context.push('/tracking?id=${complaint.id}'),
                   );
-                },
-              ),
+                }
+
+                return ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: recent.length,
+                  separatorBuilder: (context, index) =>
+                      const Divider(color: AppTheme.borderLight, height: 16),
+                  itemBuilder: (context, index) {
+                    final item = recent[index];
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        '${item.grievanceNumber} • ${item.getDisplayTitle()}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      subtitle: Text(
+                        '${item.departmentId ?? "Auto AI Routing"} • ${item.status.replaceAll("_", " ").toUpperCase()}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                      trailing: const Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        size: 14,
+                        color: AppTheme.textSecondary,
+                      ),
+                      onTap: () {
+                        context.push('/tracking');
+                      },
+                    );
+                  },
+                );
+              },
+            ),
           ],
         ),
       ),
     );
-  }
-
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'Submitted':
-        return AppTheme.primaryBlue;
-      case 'Verification':
-        return AppTheme.warning;
-      case 'Forwarded':
-        return const Color(0xFF7C3AED);
-      case 'Resolved':
-        return AppTheme.success;
-      default:
-        return AppTheme.textSecondary;
-    }
   }
 }
