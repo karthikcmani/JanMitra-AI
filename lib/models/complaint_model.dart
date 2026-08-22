@@ -71,21 +71,21 @@ class ComplaintModel {
 
   factory ComplaintModel.fromJson(Map<String, dynamic> json) {
     return ComplaintModel(
-      id: json['id'] as String,
-      userEmail: (json['user_email'] ?? json['userEmail'] ?? '') as String,
-      title: json['title'] as String,
-      category: json['category'] as String,
-      department: json['department'] as String,
-      district: json['district'] as String,
-      description: json['description'] as String,
-      priority: json['priority'] as String,
-      status: json['status'] as String,
-      createdAt: DateTime.parse(
-        (json['created_at'] ?? json['createdAt']) as String,
-      ),
-      updatedAt: DateTime.parse(
-        (json['updated_at'] ?? json['updatedAt']) as String,
-      ),
+      id: (json['id'] ?? '').toString(),
+      userEmail: (json['user_email'] ?? json['userEmail'] ?? '').toString(),
+      title: (json['title'] ?? '').toString(),
+      category: (json['category'] ?? '').toString(),
+      department: (json['department'] ?? '').toString(),
+      district: (json['district'] ?? '').toString(),
+      description: (json['description'] ?? '').toString(),
+      priority: (json['priority'] ?? 'medium').toString(),
+      status: (json['status'] ?? 'pending').toString(),
+      createdAt: json['created_at'] != null || json['createdAt'] != null
+          ? DateTime.tryParse((json['created_at'] ?? json['createdAt']).toString()) ?? DateTime.now()
+          : DateTime.now(),
+      updatedAt: json['updated_at'] != null || json['updatedAt'] != null
+          ? DateTime.tryParse((json['updated_at'] ?? json['updatedAt']).toString()) ?? DateTime.now()
+          : DateTime.now(),
     );
   }
 }
