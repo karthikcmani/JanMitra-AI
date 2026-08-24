@@ -65,8 +65,37 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
   void _showActionDialog(GrievanceModel item) {
     final remarksController = TextEditingController();
     final questionController = TextEditingController();
-    String selectedStatus = 'forwarded';
-    String selectedDept = item.departmentId ?? 'Kerala Water Authority (KWA)';
+
+    const allowedDepts = [
+      'Kerala Water Authority (KWA)',
+      'Public Works Department (PWD)',
+      'Kerala State Electricity Board (KSEB)',
+      'Local Self Government Department (LSGD / Panchayat)',
+      'Revenue & General Administration',
+    ];
+
+    const allowedStatuses = [
+      'forwarded',
+      'clarification_required',
+      'under_processing',
+      'under_analysis',
+      'intake_received',
+      'resolved',
+    ];
+
+    String getInitialDept(GrievanceModel g) {
+      final dept = g.departmentId ?? g.predictedDepartment ?? '';
+      if (allowedDepts.contains(dept)) return dept;
+      if (dept.contains('KWA') || dept.contains('Water')) return 'Kerala Water Authority (KWA)';
+      if (dept.contains('PWD') || dept.contains('Works')) return 'Public Works Department (PWD)';
+      if (dept.contains('KSEB') || dept.contains('Electricity')) return 'Kerala State Electricity Board (KSEB)';
+      if (dept.contains('LSGD') || dept.contains('Panchayat')) return 'Local Self Government Department (LSGD / Panchayat)';
+      if (dept.contains('Revenue')) return 'Revenue & General Administration';
+      return 'Kerala Water Authority (KWA)';
+    }
+
+    String selectedStatus = allowedStatuses.contains(item.status.toLowerCase()) ? item.status.toLowerCase() : 'forwarded';
+    String selectedDept = getInitialDept(item);
 
     showDialog(
       context: context,
@@ -147,6 +176,8 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                       DropdownMenuItem(value: 'forwarded', child: Text('Approve & Forward to Department')),
                       DropdownMenuItem(value: 'clarification_required', child: Text('Request Citizen Clarification')),
                       DropdownMenuItem(value: 'under_processing', child: Text('Mark Under Active Processing')),
+                      DropdownMenuItem(value: 'under_analysis', child: Text('Under AI Analysis')),
+                      DropdownMenuItem(value: 'intake_received', child: Text('Intake Received')),
                       DropdownMenuItem(value: 'resolved', child: Text('Mark Resolved & Closed')),
                     ],
                     onChanged: (val) {
@@ -541,6 +572,10 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
       case 'resolved':
       case 'closed':
         return AppTheme.success;
+      case 'under_analysis':
+        return Colors.blue;
+      case 'intake_received':
+        return Colors.amber;
       default:
         return const Color(0xFF7C3AED);
     }

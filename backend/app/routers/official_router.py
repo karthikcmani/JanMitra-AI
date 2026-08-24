@@ -83,6 +83,40 @@ async def get_admin_department_workload(
     return await service.get_department_workload()
 
 
+@router.get(
+    "/admin/officials",
+    response_model=List[dict],
+    status_code=status.HTTP_200_OK,
+    summary="Retrieve roster of registered government officials for admin management",
+)
+async def get_admin_official_users(
+    db: AsyncSession = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_official_or_admin),
+):
+    service = OfficialService(db)
+    return await service.get_all_official_users()
+
+
+@router.put(
+    "/admin/users/{user_id}",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    summary="Update official user status (active/inactive) or department assignment",
+)
+async def update_admin_official_user(
+    user_id: str,
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_official_or_admin),
+):
+    service = OfficialService(db)
+    return await service.update_official_user_status(
+        user_id=user_id,
+        is_active=payload.get("is_active"),
+        department_id=payload.get("department_id"),
+    )
+
+
 
 @router.get(
     "/grievances",

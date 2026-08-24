@@ -68,13 +68,13 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
     }
   }
 
-  void _confirmAndSubmitHandwritten() {
+  Future<void> _confirmAndSubmitHandwritten() async {
     final notifier = ref.read(grievanceIntakeProvider.notifier);
     notifier.updateVerifiedText(_verifiedTextController.text);
-    notifier.confirmVerification();
+    await notifier.confirmVerification();
 
     final state = ref.read(grievanceIntakeProvider);
-    if (state.isConfirmed && state.grievance != null) {
+    if (state.isConfirmed && state.grievance != null && mounted) {
       _showSuccessDialog(state.grievance!.grievanceNumber);
     }
   }
@@ -459,6 +459,29 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
                   Text(
                     'Derived OCR Confidence Score: ${(state.extractionResult!.confidenceScore! * 100).toStringAsFixed(1)}%',
                     style: TextStyle(fontSize: 11, color: Colors.blue.shade800, fontWeight: FontWeight.w600),
+                  ),
+                ],
+                if (state.extractionResult?.engineName.contains('easyocr') == true) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.amber.shade300),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.bolt_rounded, size: 18, color: Colors.amber.shade900),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Gemini AI Vision quota limit reached. Processed via local offline OCR. Please review & edit the text below before explicit confirmation.',
+                            style: TextStyle(fontSize: 11, color: Colors.amber.shade900, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ],

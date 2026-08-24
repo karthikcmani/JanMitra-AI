@@ -74,7 +74,7 @@ async def test_grievance_api_flow():
         draft_payload = {
             "title": "Broken Streetlight in Ward 12",
             "description": "Streetlight near house #45 has been non-functional for 2 weeks.",
-            "intake_mode": "direct_text",
+            "intake_mode": "ocr_handwritten",
             "original_language": "en",
             "original_text": "Broken Streetlight in Ward 12",
             "translated_text": "Broken Streetlight in Ward 12",
@@ -129,6 +129,11 @@ async def test_grievance_api_flow():
             assert audit_log.actor_id == user_a_id
             assert audit_log.new_state == "draft"
             print("PostgreSQL record & Creation Audit Log confirmed in DB!")
+
+        print("\n--- 5.5. Confirming Draft Grievance 1 & Draft Grievance 2 via submit_clarification ---")
+        await client.post(f"/api/v1/grievances/{grievance_a_id}/clarification", json={"response_text": "Confirmed direct text 1"}, headers=headers_a)
+        res_a2_id = res_draft_a2.json()["id"]
+        await client.post(f"/api/v1/grievances/{res_a2_id}/clarification", json={"response_text": "Confirmed direct text 2"}, headers=headers_a)
 
         print("\n--- 6. Testing GET /api/v1/grievances/my (Citizen A) ---")
         res_my = await client.get("/api/v1/grievances/my", headers=headers_a)

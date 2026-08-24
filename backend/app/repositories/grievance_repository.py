@@ -88,7 +88,10 @@ class GrievanceRepository:
         result = await self.db.execute(
             select(Grievance)
             .options(selectinload(Grievance.audit_logs))
-            .where(Grievance.citizen_id == citizen_id)
+            .where(
+                Grievance.citizen_id == citizen_id,
+                Grievance.status != GrievanceStatus.DRAFT,
+            )
             .order_by(Grievance.created_at.desc())
         )
         return list(result.scalars().all())

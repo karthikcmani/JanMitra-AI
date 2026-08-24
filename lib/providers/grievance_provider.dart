@@ -194,12 +194,36 @@ class GrievanceIntakeNotifier extends StateNotifier<GrievanceIntakeState> {
     state = state.copyWith(verifiedText: text);
   }
 
-  void confirmVerification() {
+  Future<void> confirmVerification() async {
     if (state.verifiedText.trim().isEmpty) {
       state = state.copyWith(errorMessage: 'Grievance text cannot be empty.');
       return;
     }
-    state = state.copyWith(isConfirmed: true, errorMessage: null);
+
+    if (state.grievance == null) {
+      state = state.copyWith(errorMessage: 'No active grievance draft found.');
+      return;
+    }
+
+    try {
+      state = state.copyWith(isLoading: true, errorMessage: null);
+
+      final confirmed = await _repository.submitClarification(
+        grievanceId: state.grievance!.id,
+        responseText: state.verifiedText.trim(),
+      );
+
+      state = state.copyWith(
+        grievance: confirmed,
+        isConfirmed: true,
+        isLoading: false,
+      );
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Failed to confirm grievance: ${e.toString()}',
+      );
+    }
   }
 
   Future<GrievanceModel?> submitDirectText({

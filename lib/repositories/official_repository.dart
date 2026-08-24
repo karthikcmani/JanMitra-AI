@@ -181,6 +181,12 @@ class OfficialRepository {
 
     return GrievanceModel.fromJson(response.data as Map<String, dynamic>);
   }
+
+  Future<List<Map<String, dynamic>>> getOfficialUsers() async {
+    final response = await apiService.get('/official/admin/officials');
+    final list = response.data as List<dynamic>;
+    return list.map((j) => Map<String, dynamic>.from(j as Map)).toList();
+  }
 }
 
 final officialRepositoryProvider = Provider<OfficialRepository>((ref) {
@@ -201,4 +207,9 @@ final attentionQueueProvider = FutureProvider.autoDispose<List<GrievanceModel>>(
 final departmentWorkloadProvider = FutureProvider.autoDispose<List<DepartmentWorkloadModel>>((ref) async {
   final repo = ref.watch(officialRepositoryProvider);
   return await repo.getDepartmentWorkload();
+});
+
+final officialUsersProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  final repo = ref.watch(officialRepositoryProvider);
+  return await repo.getOfficialUsers();
 });

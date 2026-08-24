@@ -560,3 +560,43 @@ class OfficialService:
 
         return workloads
 
+    async def get_all_official_users(self) -> List[Dict[str, Any]]:
+        stmt = select(User).where(User.role == "official").order_by(User.full_name.asc())
+        res = await self.db.execute(stmt)
+        users = res.scalars().all()
+        return [
+            {
+                "id": u.id,
+                "full_name": u.full_name,
+                "email": u.email,
+                "phone": u.phone,
+                "role": u.role,
+                "department_id": u.department_id or "Kerala Water Authority (KWA)",
+                "is_active": u.is_active,
+            }
+            for u in users
+        ]
+
+    async def update_official_user_status(
+        self, user_id: str, is_active: Optional[bool] = None, department_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        stmt = select(User).where(User.id == user_id)
+        res = await self.db.execute(stmt)
+        user = res.scalar_one_or_none()
+        if not user:
+            raise ValueError(f"Official user {user_id} not found.")
+
+        if is_active is not None:
+            user.is_active = is_active
+        if department_id is not None:
+            user.department_id = department_id
+
+        await self.db.flush()
+        return {
+            "id": user.id,
+            "full_name": user.full_name,
+            "email": user.email,
+            "department_id": user.department_id,
+            "is_active": user.is_active,
+        }
+
