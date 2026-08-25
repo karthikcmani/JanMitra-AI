@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from abc import ABC, abstractmethod
@@ -536,6 +537,8 @@ class GeminiVisionOCRAdapter(BaseExtractionAdapter):
             "Provide the exact transcription followed by an '--- EXTRACTED KEYWORDS & SUMMARY ---' section listing the extracted subject title and main problem keywords."
         )
 
+        last_error_msg = None
+
         # 1. Try Direct REST API call (Fast & Zero SDK dependency)
         try:
             import base64
@@ -545,57 +548,84 @@ class GeminiVisionOCRAdapter(BaseExtractionAdapter):
             ImageFile.LOAD_TRUNCATED_IMAGES = True
 
             ext = file_path.suffix.lower()
-            if ext in [".jpg", ".jpeg", ".png", ".webp"]:
+            inline_parts = []
+
+            if ext == ".pdf":
+                pdf_converted = False
+                if fitz:
+                    try:
+                        doc = fitz.open(file_path)
+                        for page in doc:
+                            pix = page.get_pixmap(dpi=200)
+                            img_bytes = pix.tobytes("png")
+                            encoded_b64 = base64.b64encode(img_bytes).decode("utf-8")
+                            inline_parts.append({
+                                "inline_data": {
+                                    "mime_type": "image/png",
+                                    "data": encoded_b64,
+                                }
+                            })
+                        doc.close()
+                        pdf_converted = len(inline_parts) > 0
+                    except Exception as pdf_err:
+                        logger.warning(f"PyMuPDF page rendering fallback to raw PDF: {pdf_err}")
+
+                if not pdf_converted:
+                    file_bytes = file_path.read_bytes()
+                    encoded_b64 = base64.b64encode(file_bytes).decode("utf-8")
+                    inline_parts.append({
+                        "inline_data": {
+                            "mime_type": "application/pdf",
+                            "data": encoded_b64,
+                        }
+                    })
+            else:
                 try:
                     img = Image.open(file_path).convert("RGB")
                     if max(img.size) > 2048:
                         img.thumbnail((2048, 2048))
                     buf = BytesIO()
                     img.save(buf, format="JPEG", quality=90)
-                    encoded_bytes = base64.b64encode(buf.getvalue()).decode("utf-8")
+                    encoded_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
                     mime_type = "image/jpeg"
                 except Exception:
                     file_bytes = file_path.read_bytes()
-                    encoded_bytes = base64.b64encode(file_bytes).decode("utf-8")
+                    encoded_b64 = base64.b64encode(file_bytes).decode("utf-8")
                     mime_type = attachment.mime_type or "image/jpeg"
-            else:
-                file_bytes = file_path.read_bytes()
-                encoded_bytes = base64.b64encode(file_bytes).decode("utf-8")
-                mime_type = attachment.mime_type or "image/jpeg"
 
-            payload = {
-                "contents": [
-                    {
-                        "parts": [
-                            {"text": prompt},
-                            {
-                                "inline_data": {
-                                    "mime_type": mime_type,
-                                    "data": encoded_bytes,
-                                }
-                            },
-                        ]
+                inline_parts.append({
+                    "inline_data": {
+                        "mime_type": mime_type,
+                        "data": encoded_b64,
                     }
-                ]
+                })
+
+            parts = [{"text": prompt}] + inline_parts
+            payload = {
+                "contents": [{"parts": parts}]
+            }
+
+            headers = {
+                "Content-Type": "application/json",
+                "x-goog-api-key": api_key.strip(),
             }
 
             models_to_try = [
                 "gemini-3.6-flash",
                 "gemini-3.5-flash",
-                "gemini-3.5-flash-lite",
-                "gemini-3-flash",
+                "gemini-2.5-flash",
             ]
-            last_error_msg = None
+
             async with httpx.AsyncClient(timeout=45.0) as client:
                 for model_name in models_to_try:
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
-                    resp = await client.post(url, json=payload)
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+                    resp = await client.post(url, json=payload, headers=headers)
                     if resp.status_code == 200:
                         data = resp.json()
                         candidates = data.get("candidates", [])
                         if candidates:
-                            parts = candidates[0].get("content", {}).get("parts", [])
-                            text_pieces = [p.get("text", "") for p in parts if "text" in p]
+                            c_parts = candidates[0].get("content", {}).get("parts", [])
+                            text_pieces = [p.get("text", "") for p in c_parts if "text" in p]
                             extracted_text = "\n".join(text_pieces).strip()
                             if extracted_text:
                                 return NormalizedExtractionResult(
@@ -609,41 +639,78 @@ class GeminiVisionOCRAdapter(BaseExtractionAdapter):
                                     processed_at=now,
                                 )
                     else:
-                        last_error_msg = f"Gemini API returned status {resp.status_code}: {resp.text[:150]}"
+                        safe_body = resp.text[:300].replace(api_key, "[REDACTED]")
+                        last_error_msg = f"Gemini Vision REST API model '{model_name}' failed with HTTP {resp.status_code}: {safe_body}"
                         logger.warning(last_error_msg)
 
         except Exception as rest_err:
-            last_error_msg = f"Gemini REST API attempt failed: {rest_err}"
+            safe_err = str(rest_err).replace(api_key, "[REDACTED]")
+            last_error_msg = f"Gemini REST API attempt failed: {safe_err}"
             logger.warning(last_error_msg)
 
-        # 2. Try SDK fallback if google.generativeai installed
+        # 2. Try SDK fallback (Modern google-genai or legacy google-generativeai)
         try:
-            import google.generativeai as genai
-            from PIL import Image
+            from google import genai
+            from google.genai import types
 
-            genai.configure(api_key=api_key)
+            client = genai.Client(api_key=api_key.strip())
+            mime_type = attachment.mime_type or ("application/pdf" if file_path.suffix.lower() == ".pdf" else "image/jpeg")
+            sdk_part = types.Part.from_bytes(data=file_path.read_bytes(), mime_type=mime_type)
+
+            for model_name in ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.5-flash"]:
+                try:
+                    response = await asyncio.to_thread(
+                        client.models.generate_content,
+                        model=model_name,
+                        contents=[prompt, sdk_part]
+                    )
+                    if response and getattr(response, "text", None):
+                        return NormalizedExtractionResult(
+                            source_type=attachment.attachment_type,
+                            source_attachment_id=attachment.id,
+                            original_language="ml",
+                            extracted_text=response.text.strip(),
+                            extraction_status=ExtractionStatus.COMPLETED,
+                            confidence_score=None,
+                            engine_name=f"google_genai_sdk_{model_name.replace('-', '_')}",
+                            processed_at=now,
+                        )
+                except Exception as sdk_model_err:
+                    safe_sdk_err = str(sdk_model_err).replace(api_key, "[REDACTED]")
+                    logger.warning(f"google-genai SDK model '{model_name}' failed: {safe_sdk_err}")
+
+        except ImportError:
             try:
-                model = genai.GenerativeModel("gemini-3.6-flash")
-            except Exception:
-                model = genai.GenerativeModel("gemini-3.5-flash")
+                import google.generativeai as legacy_genai
+                from PIL import Image
 
-            img = Image.open(file_path)
-            response = await asyncio.to_thread(model.generate_content, [prompt, img])
-            text = response.text.strip() if response and response.text else None
+                legacy_genai.configure(api_key=api_key.strip())
+                for model_name in ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.5-flash"]:
+                    try:
+                        model = legacy_genai.GenerativeModel(model_name)
+                        img = Image.open(file_path)
+                        response = await asyncio.to_thread(model.generate_content, [prompt, img])
+                        if response and getattr(response, "text", None):
+                            return NormalizedExtractionResult(
+                                source_type=attachment.attachment_type,
+                                source_attachment_id=attachment.id,
+                                original_language="ml",
+                                extracted_text=response.text.strip(),
+                                extraction_status=ExtractionStatus.COMPLETED,
+                                confidence_score=None,
+                                engine_name=f"google_generativeai_sdk_{model_name.replace('-', '_')}",
+                                processed_at=now,
+                            )
+                    except Exception as leg_err:
+                        safe_leg_err = str(leg_err).replace(api_key, "[REDACTED]")
+                        logger.warning(f"google-generativeai SDK model '{model_name}' failed: {safe_leg_err}")
+            except Exception as legacy_sdk_err:
+                safe_legacy = str(legacy_sdk_err).replace(api_key, "[REDACTED]")
+                logger.warning(f"Gemini legacy SDK fallback failed: {safe_legacy}")
 
-            if text:
-                return NormalizedExtractionResult(
-                    source_type=attachment.attachment_type,
-                    source_attachment_id=attachment.id,
-                    original_language="ml",
-                    extracted_text=text,
-                    extraction_status=ExtractionStatus.COMPLETED,
-                    confidence_score=None,
-                    engine_name=engine_name,
-                    processed_at=now,
-                )
-        except Exception as sdk_err:
-            logger.warning(f"Gemini SDK fallback attempt failed: {sdk_err}")
+        except Exception as genai_err:
+            safe_genai_err = str(genai_err).replace(api_key, "[REDACTED]")
+            logger.warning(f"google-genai SDK attempt failed: {safe_genai_err}")
 
         return NormalizedExtractionResult(
             source_type=attachment.attachment_type,
