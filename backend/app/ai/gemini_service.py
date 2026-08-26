@@ -99,7 +99,7 @@ Respond ONLY with a valid JSON object matching this exact schema:
         models_to_try = [
             "gemini-3.6-flash",
             "gemini-3.5-flash",
-            "gemini-2.5-flash",
+            "gemini-flash-latest",
         ]
 
         try:
