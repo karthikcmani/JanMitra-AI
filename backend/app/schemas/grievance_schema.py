@@ -21,6 +21,11 @@ class GrievanceClarificationRequest(BaseModel):
     response_text: str = Field(..., min_length=1)
 
 
+class GrievanceVerificationRequest(BaseModel):
+    verified_text: str = Field(..., min_length=1)
+    attachment_id: Optional[str] = None
+
+
 
 class GrievanceAuditLogResponse(BaseModel):
     id: str

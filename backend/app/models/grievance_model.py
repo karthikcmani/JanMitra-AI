@@ -10,6 +10,7 @@ class ExtractionStatus:
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
+    NEEDS_VERIFICATION = "needs_verification"
     FAILED = "failed"
 
 

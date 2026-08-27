@@ -168,24 +168,25 @@ class GrievanceIntakeNotifier extends StateNotifier<GrievanceIntakeState> {
       } else {
         state = state.copyWith(
           extractionResult: extractionResult,
-          extractionStep: IntakeExtractionStep.failed,
+          rawExtractedText: null,
+          verifiedText: '',
+          extractionStep: IntakeExtractionStep.completed,
           isLoading: false,
-          errorMessage: extractionResult.errorMessage ??
-              'Extraction completed with empty output or failed.',
+          errorMessage: null,
         );
       }
     } on DioException catch (e) {
       final detail = e.response?.data?['detail']?.toString() ?? e.message;
       state = state.copyWith(
-        extractionStep: IntakeExtractionStep.failed,
+        extractionStep: IntakeExtractionStep.completed,
         isLoading: false,
-        errorMessage: 'Backend Error: $detail',
+        errorMessage: 'Note: Automatic OCR unavailable ($detail). Please type/verify the complaint text below.',
       );
     } catch (e) {
       state = state.copyWith(
-        extractionStep: IntakeExtractionStep.failed,
+        extractionStep: IntakeExtractionStep.completed,
         isLoading: false,
-        errorMessage: 'Failed to process document intake: ${e.toString()}',
+        errorMessage: 'Note: Automatic OCR unavailable. Please type/verify the complaint text below.',
       );
     }
   }
@@ -208,9 +209,10 @@ class GrievanceIntakeNotifier extends StateNotifier<GrievanceIntakeState> {
     try {
       state = state.copyWith(isLoading: true, errorMessage: null);
 
-      final confirmed = await _repository.submitClarification(
+      final confirmed = await _repository.verifyGrievance(
         grievanceId: state.grievance!.id,
-        responseText: state.verifiedText.trim(),
+        verifiedText: state.verifiedText.trim(),
+        attachmentId: state.attachment?.id,
       );
 
       state = state.copyWith(

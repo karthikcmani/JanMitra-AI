@@ -1,7 +1,7 @@
 import uuid
 import time
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.grievance_model import AttachmentType
@@ -328,6 +328,60 @@ class GrievanceService:
         await self.repo.db.commit()
 
         # Trigger AI analysis and department routing
+        try:
+            from app.services.official_service import OfficialService
+            official_service = OfficialService(self.repo.db)
+            await official_service.process_document_and_route(grievance.id, citizen_id)
+        except Exception:
+            pass
+
+        self.repo.db.expire_all()
+        updated = await self.repo.get_user_grievance(grievance_id, citizen_id)
+        return GrievanceResponse.model_validate(updated)
+
+    async def verify_and_submit(
+        self, citizen_id: str, grievance_id: str, verified_text: str, attachment_id: Optional[str] = None
+    ) -> GrievanceResponse:
+        from app.models.grievance_model import GrievanceAuditLog, GrievanceStatus, ExtractionStatus
+        grievance = await self.repo.get_user_grievance(grievance_id, citizen_id)
+        if not grievance:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Grievance not found.",
+            )
+
+        prev_status = grievance.status
+        grievance.original_text = verified_text
+        grievance.status = GrievanceStatus.INTAKE_RECEIVED
+
+        if attachment_id:
+            att = await self.repo.get_attachment_for_grievance(grievance_id, attachment_id)
+            if att:
+                att.raw_extracted_text = verified_text
+                att.extraction_status = ExtractionStatus.COMPLETED
+                att.extraction_engine = "citizen_manual_verification"
+        else:
+            atts = await self.repo.get_attachments_by_grievance(grievance_id)
+            for att in atts:
+                if not att.raw_extracted_text:
+                    att.raw_extracted_text = verified_text
+                    att.extraction_status = ExtractionStatus.COMPLETED
+                    att.extraction_engine = "citizen_manual_verification"
+
+        audit_log = GrievanceAuditLog(
+            id=str(uuid.uuid4()),
+            grievance_id=grievance_id,
+            actor_id=citizen_id,
+            actor_role="citizen",
+            action_type="CITIZEN_VERIFICATION_CONFIRMED",
+            previous_state=prev_status,
+            new_state=grievance.status,
+            remarks=f"Citizen verified/provided petition text: {verified_text[:100]}...",
+        )
+        self.repo.db.add(audit_log)
+        await self.repo.db.commit()
+
+        # Trigger AI analysis & routing pipeline
         try:
             from app.services.official_service import OfficialService
             official_service = OfficialService(self.repo.db)
