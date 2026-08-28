@@ -616,7 +616,7 @@ class GeminiVisionOCRAdapter(BaseExtractionAdapter):
                 "gemini-flash-latest",
             ]
 
-            async with httpx.AsyncClient(timeout=45.0) as client:
+            async with httpx.AsyncClient(timeout=8.0) as client:
                 for model_name in models_to_try:
                     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
                     resp = await client.post(url, json=payload, headers=headers)
@@ -642,6 +642,18 @@ class GeminiVisionOCRAdapter(BaseExtractionAdapter):
                         safe_body = resp.text[:300].replace(api_key, "[REDACTED]")
                         last_error_msg = f"Gemini Vision REST API model '{model_name}' failed with HTTP {resp.status_code}: {safe_body}"
                         logger.warning(last_error_msg)
+                        if resp.status_code == 429:
+                            return NormalizedExtractionResult(
+                                source_type=attachment.attachment_type,
+                                source_attachment_id=attachment.id,
+                                original_language="ml",
+                                extracted_text=None,
+                                extraction_status=ExtractionStatus.NEEDS_VERIFICATION,
+                                confidence_score=None,
+                                engine_name=f"gemini_vision_ocr_{model_name.replace('-', '_')}",
+                                processed_at=now,
+                                error_message=last_error_msg,
+                            )
 
         except Exception as rest_err:
             safe_err = str(rest_err).replace(api_key, "[REDACTED]")
