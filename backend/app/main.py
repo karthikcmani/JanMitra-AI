@@ -30,6 +30,12 @@ app.include_router(grievance_router, prefix=settings.API_V1_STR)
 app.include_router(official_router, prefix=settings.API_V1_STR)
 
 
+@app.on_event("startup")
+async def on_startup():
+    from app.database.session import init_db_schema
+    await init_db_schema()
+
+
 @app.get(
     f"{settings.API_V1_STR}/health",
     tags=["Health Check"],

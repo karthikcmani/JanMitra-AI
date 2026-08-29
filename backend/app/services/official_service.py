@@ -57,6 +57,8 @@ class OfficialGrievanceDetailResponse(BaseModel):
     priority: str
     predicted_department: Optional[str] = None
     assigned_department: Optional[str] = None
+    assigned_official_id: Optional[str] = None
+    assigned_official_name: Optional[str] = None
     category: Optional[str] = None
     legal_grounding_references: Optional[Dict[str, Any]] = None
     ai_explanation: Optional[str] = None
@@ -94,6 +96,7 @@ class DepartmentWorkloadResponse(BaseModel):
 
 class OfficialActionRequest(BaseModel):
     department_name: Optional[str] = Field(None, max_length=150)
+    assigned_official_id: Optional[str] = Field(None, max_length=36)
     remarks: Optional[str] = None
     new_status: Optional[str] = Field(None, max_length=50)
     question: Optional[str] = None
@@ -187,6 +190,13 @@ class OfficialService:
             citizen_res = await self.db.execute(select(User).where(User.id == g.citizen_id))
             citizen = citizen_res.scalar_one_or_none()
 
+            assigned_off_name = None
+            if getattr(g, "assigned_official_id", None):
+                off_res = await self.db.execute(select(User).where(User.id == g.assigned_official_id))
+                off_user = off_res.scalar_one_or_none()
+                if off_user:
+                    assigned_off_name = off_user.full_name
+
             # Fetch attachments
             atts_res = await self.db.execute(
                 select(GrievanceAttachment).where(GrievanceAttachment.grievance_id == g.id)
@@ -258,6 +268,8 @@ class OfficialService:
                     priority=g.priority,
                     predicted_department=analysis.predicted_category if analysis else None,
                     assigned_department=g.department_id,
+                    assigned_official_id=getattr(g, "assigned_official_id", None),
+                    assigned_official_name=assigned_off_name,
                     category=g.category,
                     legal_grounding_references=analysis.legal_grounding_references if analysis else None,
                     ai_explanation=analysis.ai_explanation if analysis else None,
@@ -422,6 +434,9 @@ class OfficialService:
         if action_in.department_name:
             grievance.department_id = action_in.department_name
 
+        if action_in.assigned_official_id:
+            grievance.assigned_official_id = action_in.assigned_official_id
+
         if action_in.new_status:
             grievance.status = action_in.new_status
 
@@ -431,11 +446,13 @@ class OfficialService:
         if action_in.question:
             remarks += f" Clarification Question: {action_in.question}"
 
+        action_type = "ADMINISTRATIVE_ASSIGNMENT_EXECUTED" if (action_in.department_name or action_in.assigned_official_id) else "OFFICIAL_ACTION_SUBMITTED"
+
         audit_log = GrievanceAuditLog(
             grievance_id=grievance_id,
             actor_id=official_id,
             actor_role="official",
-            action_type="OFFICIAL_ACTION_SUBMITTED",
+            action_type=action_type,
             previous_state=prev_status,
             new_state=grievance.status,
             remarks=remarks,

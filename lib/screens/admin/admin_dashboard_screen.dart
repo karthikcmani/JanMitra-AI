@@ -636,13 +636,29 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Dept: ${item.departmentId ?? item.predictedDepartment ?? "Unassigned"}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                ElevatedButton(
-                  onPressed: () => _showAdminActionDialog(item),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryBlue,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  ),
-                  child: const Text('Admin Action', style: TextStyle(fontSize: 11, color: Colors.white)),
+                Row(
+                  children: [
+                    OutlinedButton(
+                      onPressed: () => context.push('/official/grievance/${item.id}'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text('View File', style: TextStyle(fontSize: 11)),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: () => _showAdminActionDialog(item),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryBlue,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text('Admin Action', style: TextStyle(fontSize: 11, color: Colors.white)),
+                    ),
+                  ],
                 ),
               ],
             ),

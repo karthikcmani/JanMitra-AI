@@ -3,6 +3,7 @@ import time
 from pathlib import Path
 from typing import List, Optional, Tuple
 from fastapi import HTTPException, UploadFile, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.grievance_model import AttachmentType
 from app.repositories.grievance_repository import GrievanceRepository
@@ -323,10 +324,10 @@ class GrievanceService:
             grievance_id=grievance_id,
             actor_id=citizen_id,
             actor_role="citizen",
-            action_type="EXPLICIT_VERIFICATION_CONFIRMED",
+            action_type="CITIZEN_CLARIFICATION_SUBMITTED",
             previous_state=prev_status,
             new_state=grievance.status,
-            remarks=f"Citizen explicitly verified and confirmed petition text: {response_text[:100]}...",
+            remarks=f"Citizen responded to clarification request: {response_text[:100]}...",
         )
         self.repo.db.add(audit_log)
         await self.repo.db.commit()
@@ -365,7 +366,11 @@ class GrievanceService:
                 att.extraction_status = ExtractionStatus.COMPLETED
                 att.extraction_engine = "citizen_manual_verification"
         else:
-            atts = await self.repo.get_attachments_by_grievance(grievance_id)
+            from app.models.grievance_model import GrievanceAttachment
+            atts_res = await self.repo.db.execute(
+                select(GrievanceAttachment).where(GrievanceAttachment.grievance_id == grievance_id)
+            )
+            atts = atts_res.scalars().all()
             for att in atts:
                 if not att.raw_extracted_text:
                     att.raw_extracted_text = verified_text

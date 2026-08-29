@@ -23,6 +23,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(
         String(50), default="citizen", nullable=False
     )
+    department_id: Mapped[str | None] = mapped_column(String(150), nullable=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=False
     )
@@ -39,5 +40,8 @@ class User(Base):
     )
 
     grievances = relationship(
-        "Grievance", back_populates="citizen", cascade="all, delete-orphan"
+        "Grievance",
+        foreign_keys="[Grievance.citizen_id]",
+        back_populates="citizen",
+        cascade="all, delete-orphan",
     )
