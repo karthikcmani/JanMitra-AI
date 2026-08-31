@@ -187,6 +187,23 @@ class OfficialRepository {
     final list = response.data as List<dynamic>;
     return list.map((j) => Map<String, dynamic>.from(j as Map)).toList();
   }
+
+  Future<Map<String, dynamic>> updateOfficialUser({
+    required String userId,
+    bool? isActive,
+    String? departmentId,
+  }) async {
+    final payload = <String, dynamic>{};
+    if (isActive != null) payload['is_active'] = isActive;
+    if (departmentId != null) payload['department_id'] = departmentId;
+
+    final response = await apiService.put(
+      '/official/admin/users/$userId',
+      data: payload,
+    );
+
+    return Map<String, dynamic>.from(response.data as Map);
+  }
 }
 
 final officialRepositoryProvider = Provider<OfficialRepository>((ref) {

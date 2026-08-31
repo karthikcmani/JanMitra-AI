@@ -26,29 +26,24 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     super.dispose();
   }
 
-  void _triggerSearch() async {
+  void _triggerSearch({String? status, String? dept, String? priority}) async {
     final query = _searchController.text.trim();
-    final status = _selectedStatusFilter == 'ALL' ? null : _selectedStatusFilter.toLowerCase();
-    final dept = _selectedDeptFilter == 'ALL' ? null : _selectedDeptFilter;
-
-    if (query.isEmpty && status == null && dept == null) {
-      setState(() {
-        _isSearching = false;
-        _searchResults = null;
-      });
-      return;
-    }
+    final effectiveStatus = status ?? (_selectedStatusFilter == 'ALL' ? null : _selectedStatusFilter.toLowerCase());
+    final effectiveDept = dept ?? (_selectedDeptFilter == 'ALL' ? null : _selectedDeptFilter);
 
     setState(() {
       _isSearching = true;
+      if (status != null) _selectedStatusFilter = status;
+      if (dept != null) _selectedDeptFilter = dept;
     });
 
     try {
       final repo = ref.read(officialRepositoryProvider);
       final results = await repo.searchGrievances(
         query: query.isNotEmpty ? query : null,
-        status: status,
-        departmentId: dept,
+        status: effectiveStatus,
+        departmentId: effectiveDept,
+        priority: priority,
       );
       if (mounted) {
         setState(() {
@@ -98,11 +93,15 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
 
     String selectedStatus = allowedStatuses.contains(item.status.toLowerCase()) ? item.status.toLowerCase() : 'forwarded';
     String selectedDept = getInitialDept(item);
+    String? selectedOfficialId;
 
     showDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setModalState) {
+          final officialsAsync = ref.watch(officialUsersProvider);
+          final officialsList = officialsAsync.asData?.value ?? [];
+
           return AlertDialog(
             title: Text('Admin Control — ${item.grievanceNumber}'),
             content: SingleChildScrollView(
@@ -160,6 +159,31 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                       if (val != null) setModalState(() => selectedDept = val);
                     },
                   ),
+
+                  if (officialsList.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    const Text('Assign Official Staff Member:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    DropdownButton<String?>(
+                      value: selectedOfficialId,
+                      isExpanded: true,
+                      hint: const Text('Select Department Officer', style: TextStyle(fontSize: 12)),
+                      items: [
+                        const DropdownMenuItem<String?>(value: null, child: Text('Auto-assign by Department', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic))),
+                        ...officialsList.map((u) {
+                          final id = u['id']?.toString();
+                          final name = u['full_name']?.toString() ?? 'Official';
+                          final dept = u['department_id']?.toString() ?? '';
+                          return DropdownMenuItem<String?>(
+                            value: id,
+                            child: Text('$name ($dept)', style: const TextStyle(fontSize: 12)),
+                          );
+                        }),
+                      ],
+                      onChanged: (val) {
+                        setModalState(() => selectedOfficialId = val);
+                      },
+                    ),
+                  ],
 
                   const SizedBox(height: 12),
                   const Text('Update Status:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
@@ -221,6 +245,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                       ref.invalidate(officialSummaryProvider);
                       ref.invalidate(attentionQueueProvider);
                       ref.invalidate(departmentWorkloadProvider);
+                      ref.invalidate(officialUsersProvider);
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Admin action updated successfully!'), backgroundColor: AppTheme.success),
                       );
@@ -235,6 +260,86 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 },
                 style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
                 child: const Text('Submit Action', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showManageOfficialDialog(Map<String, dynamic> user) {
+    const allowedDepts = [
+      'Kerala Water Authority (KWA)',
+      'Public Works Department (PWD)',
+      'Kerala State Electricity Board (KSEB)',
+      'Local Self Government Department (LSGD / Panchayat)',
+      'Revenue & General Administration',
+    ];
+
+    String selectedDept = allowedDepts.contains(user['department_id'])
+        ? user['department_id']
+        : 'Kerala Water Authority (KWA)';
+    bool isActive = user['is_active'] ?? true;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return AlertDialog(
+            title: Text('Manage Official — ${user['full_name']}'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Email: ${user['email']}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(height: 12),
+                const Text('Assigned Department:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                DropdownButton<String>(
+                  value: selectedDept,
+                  isExpanded: true,
+                  items: allowedDepts.map((d) => DropdownMenuItem(value: d, child: Text(d, style: const TextStyle(fontSize: 12)))).toList(),
+                  onChanged: (val) {
+                    if (val != null) setModalState(() => selectedDept = val);
+                  },
+                ),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  title: const Text('Official Account Active', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                  value: isActive,
+                  onChanged: (val) => setModalState(() => isActive = val),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: () async {
+                  try {
+                    final repo = ref.read(officialRepositoryProvider);
+                    await repo.updateOfficialUser(
+                      userId: user['id'],
+                      isActive: isActive,
+                      departmentId: selectedDept,
+                    );
+                    if (context.mounted) {
+                      Navigator.pop(dialogContext);
+                      ref.invalidate(officialUsersProvider);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Official user updated successfully!'), backgroundColor: AppTheme.success),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: AppTheme.danger),
+                      );
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
+                child: const Text('Save Changes', style: TextStyle(color: Colors.white)),
               ),
             ],
           );
@@ -261,6 +366,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               ref.invalidate(officialSummaryProvider);
               ref.invalidate(attentionQueueProvider);
               ref.invalidate(departmentWorkloadProvider);
+              ref.invalidate(officialUsersProvider);
             },
             tooltip: 'Refresh Analytics',
           ),
@@ -280,13 +386,14 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           ref.invalidate(officialSummaryProvider);
           ref.invalidate(attentionQueueProvider);
           ref.invalidate(departmentWorkloadProvider);
+          ref.invalidate(officialUsersProvider);
         },
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Admin Header Badge
+              // Admin Header Banner
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
@@ -306,14 +413,14 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                         Icon(Icons.shield_outlined, color: Colors.amber, size: 24),
                         SizedBox(width: 8),
                         Text(
-                          'Administrative Operations Center',
+                          'Administrative Operations Command Center',
                           style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
                     SizedBox(height: 6),
                     Text(
-                      'Real-time state overview, departmental workload analysis, and grievance governance.',
+                      'Real-time state overview, departmental workload analysis, official staff roster management, and complete administrative control.',
                       style: TextStyle(color: Colors.white70, fontSize: 13),
                     ),
                   ],
@@ -322,7 +429,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
 
               const SizedBox(height: 20),
 
-              // Summary Stat Cards
+              // Summary Stat Cards (Interactive Taps)
+              const Text('System Analytics & Quick Filter Matrix', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              const SizedBox(height: 8),
               summaryAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, s) => Text('Summary error: $e', style: const TextStyle(color: AppTheme.danger)),
@@ -360,7 +469,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                           ),
                           const SizedBox(width: 8),
                           ElevatedButton.icon(
-                            onPressed: _triggerSearch,
+                            onPressed: () => _triggerSearch(),
                             icon: const Icon(Icons.filter_list_rounded, size: 18),
                             label: const Text('Filter'),
                             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
@@ -458,8 +567,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
 
               const SizedBox(height: 24),
 
-              // Admin Department Workload Breakdown
-              const Text('Statewide Departmental Workload Matrix', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              // Admin Department Workload Breakdown (Interactive Taps)
+              const Text('Statewide Departmental Workload Matrix (Tap to filter)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 10),
               workloadAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
@@ -471,8 +580,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
 
               const SizedBox(height: 24),
 
-              // Registered Official Roster & Staff Management
-              const Text('Statewide Government Official Roster', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              // Registered Official Roster & Staff Management (Interactive Actions)
+              const Text('Statewide Government Official Roster (Tap to manage)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 10),
               ref.watch(officialUsersProvider).when(
                 loading: () => const Center(child: CircularProgressIndicator()),
@@ -499,80 +608,151 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   }
 
   Widget _buildOfficialUserCard(Map<String, dynamic> user) {
+    final isActive = user['is_active'] ?? true;
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Row(
-          children: [
-            const CircleAvatar(
-              backgroundColor: AppTheme.primaryBlue,
-              radius: 18,
-              child: Icon(Icons.badge_rounded, color: Colors.white, size: 18),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(user['full_name'] ?? 'Official User', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  Text(
-                    'Dept: ${user['department_id']} • Email: ${user['email']} • Phone: ${user['phone'] ?? "N/A"}',
-                    style: const TextStyle(fontSize: 11, color: Colors.black54),
-                  ),
-                ],
+      child: InkWell(
+        onTap: () => _showManageOfficialDialog(user),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Row(
+            children: [
+              const CircleAvatar(
+                backgroundColor: AppTheme.primaryBlue,
+                radius: 18,
+                child: Icon(Icons.badge_rounded, color: Colors.white, size: 18),
               ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppTheme.success.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(user['full_name'] ?? 'Official User', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    Text(
+                      'Dept: ${user['department_id'] ?? "Unassigned"} • Email: ${user['email']}',
+                      style: const TextStyle(fontSize: 11, color: Colors.black54),
+                    ),
+                  ],
+                ),
               ),
-              child: const Text('Active Staff', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.success)),
-            ),
-          ],
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isActive ? AppTheme.success.withValues(alpha: 0.15) : Colors.red.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  isActive ? 'Active Staff' : 'Inactive',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isActive ? AppTheme.success : AppTheme.danger),
+                ),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                icon: const Icon(Icons.edit_rounded, size: 18, color: Colors.grey),
+                onPressed: () => _showManageOfficialDialog(user),
+                tooltip: 'Edit Official User',
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildAdminSummaryCards(dynamic summary) {
-    return GridView.count(
-      crossAxisCount: 4,
-      crossAxisSpacing: 10,
-      mainAxisSpacing: 10,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
+    return Column(
       children: [
-        _statCard('Total', summary.totalGrievances.toString(), AppTheme.primaryBlue, Icons.folder_special_rounded),
-        _statCard('Pending', summary.pending.toString(), Colors.orange, Icons.hourglass_top_rounded),
-        _statCard('Active', summary.underProcessing.toString(), AppTheme.secondaryTeal, Icons.sync_rounded),
-        _statCard('Clarify', summary.clarificationRequired.toString(), Colors.purple, Icons.help_outline_rounded),
-        _statCard('Forwarded', summary.forwarded.toString(), Colors.indigo, Icons.send_rounded),
-        _statCard('Resolved', summary.resolved.toString(), AppTheme.success, Icons.check_circle_rounded),
-        _statCard('High Prio', summary.highPriority.toString(), AppTheme.danger, Icons.priority_high_rounded),
-        _statCard('Today', summary.todayReceived.toString(), Colors.teal, Icons.today_rounded),
+        Row(
+          children: [
+            Expanded(
+              child: _statCard('Total', summary.totalGrievances.toString(), AppTheme.primaryBlue, Icons.folder_special_rounded, () {
+                setState(() {
+                  _searchController.clear();
+                  _selectedStatusFilter = 'ALL';
+                  _selectedDeptFilter = 'ALL';
+                  _isSearching = false;
+                  _searchResults = null;
+                });
+              }),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _statCard('Pending', summary.pending.toString(), Colors.orange, Icons.hourglass_top_rounded, () {
+                _triggerSearch(status: 'intake_received');
+              }),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _statCard('Active', summary.underProcessing.toString(), AppTheme.secondaryTeal, Icons.sync_rounded, () {
+                _triggerSearch(status: 'under_processing');
+              }),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _statCard('Clarify', summary.clarificationRequired.toString(), Colors.purple, Icons.help_outline_rounded, () {
+                _triggerSearch(status: 'clarification_required');
+              }),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _statCard('Forwarded', summary.forwarded.toString(), Colors.indigo, Icons.send_rounded, () {
+                _triggerSearch(status: 'forwarded');
+              }),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _statCard('Resolved', summary.resolved.toString(), AppTheme.success, Icons.check_circle_rounded, () {
+                _triggerSearch(status: 'resolved');
+              }),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _statCard('High Prio', summary.highPriority.toString(), AppTheme.danger, Icons.priority_high_rounded, () {
+                _triggerSearch(priority: 'high');
+              }),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _statCard('Today', summary.todayReceived.toString(), Colors.teal, Icons.today_rounded, () {
+                _triggerSearch();
+              }),
+            ),
+          ],
+        ),
       ],
     );
   }
 
-  Widget _statCard(String label, String value, Color color, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+  Widget _statCard(String label, String value, Color color, IconData icon, VoidCallback onTap) {
+    return Card(
+      elevation: 1,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(height: 4),
-          Text(value, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: color)),
-          Text(label, style: TextStyle(fontSize: 10, color: color.withValues(alpha: 0.9)), textAlign: TextAlign.center),
-        ],
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(height: 4),
+              Text(value, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: color)),
+              Text(label, style: TextStyle(fontSize: 10, color: color.withValues(alpha: 0.9)), textAlign: TextAlign.center),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -582,87 +762,90 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       margin: const EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(item.grievanceNumber, style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue, fontSize: 13)),
+      child: InkWell(
+        onTap: () => context.push('/official/grievance/${item.id}'),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(item.grievanceNumber, style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue, fontSize: 13)),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _getStatusColor(item.status).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      item.status.replaceAll('_', ' ').toUpperCase(),
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _getStatusColor(item.status)),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(item.title ?? 'No Title', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+              const SizedBox(height: 4),
+              Text(
+                item.description ?? '',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12, color: Colors.black87),
+              ),
+              if (item.rawOcrText != null && item.rawOcrText!.isNotEmpty) ...[
+                const SizedBox(height: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: _getStatusColor(item.status).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.grey.shade300),
                   ),
                   child: Text(
-                    item.status.toUpperCase(),
-
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _getStatusColor(item.status)),
+                    'Extracted OCR: ${item.rawOcrText}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.black87),
                   ),
                 ),
               ],
-            ),
-            const SizedBox(height: 6),
-            Text(item.title ?? 'No Title', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-            const SizedBox(height: 4),
-            Text(
-              item.description ?? '',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12, color: Colors.black87),
-            ),
-            if (item.rawOcrText != null && item.rawOcrText!.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: Text(
-                  'Extracted OCR: ${item.rawOcrText}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.black87),
-                ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Dept: ${item.departmentId ?? item.predictedDepartment ?? "Unassigned"}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  Row(
+                    children: [
+                      OutlinedButton(
+                        onPressed: () => context.push('/official/grievance/${item.id}'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('View File', style: TextStyle(fontSize: 11)),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () => _showAdminActionDialog(item),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryBlue,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('Admin Action', style: TextStyle(fontSize: 11, color: Colors.white)),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ],
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Dept: ${item.departmentId ?? item.predictedDepartment ?? "Unassigned"}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                Row(
-                  children: [
-                    OutlinedButton(
-                      onPressed: () => context.push('/official/grievance/${item.id}'),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: const Text('View File', style: TextStyle(fontSize: 11)),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: () => _showAdminActionDialog(item),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryBlue,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: const Text('Admin Action', style: TextStyle(fontSize: 11, color: Colors.white)),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -671,25 +854,30 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   Widget _buildWorkloadCard(dynamic workload) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Row(
-          children: [
-            const Icon(Icons.corporate_fare_rounded, color: AppTheme.primaryBlue),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(workload.departmentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  Text(
-                    'Total: ${workload.total} | Pending: ${workload.pending} | Processing: ${workload.underProcessing} | Resolved: ${workload.resolved}',
-                    style: const TextStyle(fontSize: 11, color: Colors.black54),
-                  ),
-                ],
+      child: InkWell(
+        onTap: () => _triggerSearch(dept: workload.departmentName),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Row(
+            children: [
+              const Icon(Icons.corporate_fare_rounded, color: AppTheme.primaryBlue),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(workload.departmentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    Text(
+                      'Total: ${workload.total} | Pending: ${workload.pending} | Processing: ${workload.underProcessing} | Resolved: ${workload.resolved}',
+                      style: const TextStyle(fontSize: 11, color: Colors.black54),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+              const Icon(Icons.chevron_right_rounded, color: Colors.grey, size: 20),
+            ],
+          ),
         ),
       ),
     );

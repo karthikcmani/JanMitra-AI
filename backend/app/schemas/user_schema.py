@@ -8,6 +8,7 @@ class UserBase(BaseModel):
     full_name: str = Field(..., min_length=2, max_length=100)
     phone: Optional[str] = Field(None, max_length=20)
     role: str = Field("citizen", max_length=50)
+    department_id: Optional[str] = Field(None, max_length=150)
 
 
 class UserCreate(UserBase):
@@ -25,6 +26,7 @@ class UserResponse(BaseModel):
     email: EmailStr
     phone: Optional[str] = None
     role: str = "citizen"
+    department_id: Optional[str] = None
     is_active: bool = True
     created_at: Optional[datetime] = None
 

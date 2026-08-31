@@ -43,7 +43,7 @@ async def test_official_workflow():
 
         # 2. Register & Authenticate Government Official
         official_in = UserCreate(
-            full_name="Dr. John C. John (Executive Official)",
+            full_name="K. R. Varma (Executive Engineer, KWA)",
             email=f"official_{ts}@gov.in",
             phone="9123456789",
             password="OfficialPass123!",
