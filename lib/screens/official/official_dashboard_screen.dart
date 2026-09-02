@@ -6,6 +6,11 @@ import '../../providers/auth_provider.dart';
 import '../../repositories/official_repository.dart';
 import '../../theme/app_theme.dart';
 
+final allOfficialGrievancesProvider = FutureProvider.autoDispose<List<GrievanceModel>>((ref) async {
+  final repo = ref.watch(officialRepositoryProvider);
+  return await repo.searchGrievances();
+});
+
 class OfficialDashboardScreen extends ConsumerStatefulWidget {
   const OfficialDashboardScreen({super.key});
 
@@ -16,6 +21,8 @@ class OfficialDashboardScreen extends ConsumerStatefulWidget {
 class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _selectedStatusFilter = 'ALL';
+  String? _selectedDeptFilter;
+  String? _selectedPriorityFilter;
   bool _isSearching = false;
   List<GrievanceModel>? _searchResults;
 
@@ -32,6 +39,8 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
     setState(() {
       _isSearching = true;
       if (status != null) _selectedStatusFilter = status.toUpperCase();
+      if (priority != null) _selectedPriorityFilter = priority;
+      if (departmentId != null) _selectedDeptFilter = departmentId;
     });
 
     try {
@@ -39,8 +48,8 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
       final results = await repo.searchGrievances(
         query: query.isNotEmpty ? query : null,
         status: effectiveStatus,
-        priority: priority,
-        departmentId: departmentId,
+        priority: _selectedPriorityFilter,
+        departmentId: _selectedDeptFilter,
       );
       if (mounted) {
         setState(() {
@@ -54,6 +63,17 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
         );
       }
     }
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _searchController.clear();
+      _selectedStatusFilter = 'ALL';
+      _selectedDeptFilter = null;
+      _selectedPriorityFilter = null;
+      _isSearching = false;
+      _searchResults = null;
+    });
   }
 
   void _showActionDialog(GrievanceModel item) {
@@ -129,7 +149,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                           ],
                         ),
                         const SizedBox(height: 6),
-                        Text('Suggested Dept: ${item.departmentId ?? "Kerala Water Authority (KWA)"}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                        Text('Suggested Dept: ${item.departmentId ?? item.predictedDepartment ?? "Kerala Water Authority (KWA)"}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
                         const SizedBox(height: 2),
                         Text('Priority: ${item.priority.toUpperCase()}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
                         const SizedBox(height: 4),
@@ -223,6 +243,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                     ref.invalidate(officialSummaryProvider);
                     ref.invalidate(attentionQueueProvider);
                     ref.invalidate(departmentWorkloadProvider);
+                    ref.invalidate(allOfficialGrievancesProvider);
                     if (context.mounted) {
                       Navigator.pop(dialogContext);
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -249,7 +270,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
   @override
   Widget build(BuildContext context) {
     final summaryAsync = ref.watch(officialSummaryProvider);
-    final attentionAsync = ref.watch(attentionQueueProvider);
+    final allGrievancesAsync = ref.watch(allOfficialGrievancesProvider);
     final workloadAsync = ref.watch(departmentWorkloadProvider);
 
     return Scaffold(
@@ -264,6 +285,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
               ref.invalidate(officialSummaryProvider);
               ref.invalidate(attentionQueueProvider);
               ref.invalidate(departmentWorkloadProvider);
+              ref.invalidate(allOfficialGrievancesProvider);
             },
             tooltip: 'Refresh Workspace Data',
           ),
@@ -283,6 +305,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
           ref.invalidate(officialSummaryProvider);
           ref.invalidate(attentionQueueProvider);
           ref.invalidate(departmentWorkloadProvider);
+          ref.invalidate(allOfficialGrievancesProvider);
         },
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
@@ -303,54 +326,66 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
 
               const SizedBox(height: 20),
 
-              // Search Results (if active)
-              if (_isSearching && _searchResults != null) ...[
+              // Filter Badge Bar (if active)
+              if (_selectedDeptFilter != null || _selectedPriorityFilter != null) ...[
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Search Results (${_searchResults!.length})',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      'Filter: ${_selectedDeptFilter ?? ""} ${_selectedPriorityFilter ?? ""}',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue),
                     ),
                     TextButton(
-                      onPressed: () {
-                        setState(() {
-                          _searchController.clear();
-                          _selectedStatusFilter = 'ALL';
-                          _isSearching = false;
-                          _searchResults = null;
-                        });
-                      },
-                      child: const Text('Clear Search'),
+                      onPressed: _clearFilters,
+                      child: const Text('Clear All Filters'),
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                ..._searchResults!.map((g) => _buildGrievanceCard(g)),
-                const SizedBox(height: 24),
+                const SizedBox(height: 8),
               ],
 
-              // Needs Attention Queue
-              const Text(
-                'Grievances Needing Administrative Attention',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue),
+              // Grievance List Header & Cards
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _isSearching ? 'Search Results (${_searchResults?.length ?? 0})' : 'Official Grievance Queue',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue),
+                  ),
+                  if (_isSearching)
+                    TextButton(
+                      onPressed: _clearFilters,
+                      child: const Text('Show All'),
+                    ),
+                ],
               ),
               const SizedBox(height: 10),
-              attentionAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, s) => Text('Attention queue error: $e', style: const TextStyle(color: AppTheme.danger)),
-                data: (queue) {
-                  if (queue.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: Text('No pending grievances in attention queue.', style: TextStyle(color: AppTheme.textSecondary)),
+
+              if (_isSearching && _searchResults != null) ...[
+                if (_searchResults!.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Text('No matching grievances found.', style: TextStyle(color: AppTheme.textSecondary)),
+                  )
+                else
+                  ..._searchResults!.map((g) => _buildGrievanceCard(g)),
+              ] else ...[
+                allGrievancesAsync.when(
+                  loading: () => const Center(child: CircularProgressIndicator()),
+                  error: (e, s) => Text('Queue error: $e', style: const TextStyle(color: AppTheme.danger)),
+                  data: (grievances) {
+                    if (grievances.isEmpty) {
+                      return const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Text('No grievances registered in system.', style: TextStyle(color: AppTheme.textSecondary)),
+                      );
+                    }
+                    return Column(
+                      children: grievances.map((g) => _buildGrievanceCard(g)).toList(),
                     );
-                  }
-                  return Column(
-                    children: queue.map((g) => _buildGrievanceCard(g)).toList(),
-                  );
-                },
-              ),
+                  },
+                ),
+              ],
 
               const SizedBox(height: 24),
 
@@ -383,14 +418,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                 summary.totalGrievances.toString(),
                 Icons.folder_open_rounded,
                 AppTheme.primaryBlue,
-                () {
-                  setState(() {
-                    _searchController.clear();
-                    _selectedStatusFilter = 'ALL';
-                    _isSearching = false;
-                    _searchResults = null;
-                  });
-                },
+                () => _clearFilters(),
               ),
             ),
             const SizedBox(width: 10),
@@ -400,9 +428,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                 summary.pending.toString(),
                 Icons.pending_actions_rounded,
                 AppTheme.warning,
-                () {
-                  _triggerSearch(status: 'intake_received');
-                },
+                () => _triggerSearch(status: 'intake_received'),
               ),
             ),
           ],
@@ -416,9 +442,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                 summary.highPriority.toString(),
                 Icons.priority_high_rounded,
                 AppTheme.danger,
-                () {
-                  _triggerSearch(priority: 'high');
-                },
+                () => _triggerSearch(priority: 'high'),
               ),
             ),
             const SizedBox(width: 10),
@@ -428,9 +452,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                 summary.clarificationRequired.toString(),
                 Icons.help_outline_rounded,
                 const Color(0xFF7C3AED),
-                () {
-                  _triggerSearch(status: 'clarification_required');
-                },
+                () => _triggerSearch(status: 'clarification_required'),
               ),
             ),
           ],
