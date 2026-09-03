@@ -6,7 +6,6 @@ import '../../providers/auth_provider.dart';
 import '../../repositories/official_repository.dart';
 import '../../theme/app_theme.dart';
 
-
 class OfficialDashboardScreen extends ConsumerStatefulWidget {
   const OfficialDashboardScreen({super.key});
 
@@ -26,27 +25,22 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
     super.dispose();
   }
 
-  void _triggerSearch() async {
+  void _triggerSearch({String? status, String? priority, String? departmentId}) async {
     final query = _searchController.text.trim();
-    final status = _selectedStatusFilter == 'ALL' ? null : _selectedStatusFilter.toLowerCase();
-
-    if (query.isEmpty && status == null) {
-      setState(() {
-        _isSearching = false;
-        _searchResults = null;
-      });
-      return;
-    }
+    final effectiveStatus = status ?? (_selectedStatusFilter == 'ALL' ? null : _selectedStatusFilter.toLowerCase());
 
     setState(() {
       _isSearching = true;
+      if (status != null) _selectedStatusFilter = status.toUpperCase();
     });
 
     try {
       final repo = ref.read(officialRepositoryProvider);
       final results = await repo.searchGrievances(
         query: query.isNotEmpty ? query : null,
-        status: status,
+        status: effectiveStatus,
+        priority: priority,
+        departmentId: departmentId,
       );
       if (mounted) {
         setState(() {
@@ -99,16 +93,18 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
+      builder: (dialogContext) => StatefulBuilder(
         builder: (context, setModalState) {
           return AlertDialog(
-            title: Text('Official Action — ${item.grievanceNumber}'),
+            title: Text('Official Governance Action — ${item.grievanceNumber}'),
             content: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('Citizen ID: ${item.citizenId}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  Text('Citizen: ${item.citizenName ?? item.citizenId}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  if (item.citizenPhone != null)
+                    Text('Phone: ${item.citizenPhone}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
                   const SizedBox(height: 8),
 
                   // AI Decision Support Panel
@@ -127,7 +123,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                             Icon(Icons.smart_toy_rounded, size: 18, color: AppTheme.primaryBlue),
                             SizedBox(width: 6),
                             Text(
-                              'AI-Assisted Decision Support',
+                              'AI-Assisted Decision Support Panel',
                               style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: AppTheme.primaryBlue),
                             ),
                           ],
@@ -192,7 +188,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                       maxLines: 2,
                       decoration: const InputDecoration(
                         labelText: 'Clarification Question for Citizen',
-                        hintText: 'e.g. Please state survey number or attach tax receipt',
+                        hintText: 'e.g. Please state survey number or attach location sketch',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -211,7 +207,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
                 onPressed: () async {
@@ -228,9 +224,9 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                     ref.invalidate(attentionQueueProvider);
                     ref.invalidate(departmentWorkloadProvider);
                     if (context.mounted) {
-                      Navigator.pop(context);
+                      Navigator.pop(dialogContext);
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Action submitted for ${item.grievanceNumber}')),
+                        SnackBar(content: Text('Action submitted for ${item.grievanceNumber}'), backgroundColor: AppTheme.success),
                       );
                     }
                   } catch (e) {
@@ -280,9 +276,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
             },
             tooltip: 'Sign Out',
           ),
-
         ],
-
       ),
       body: RefreshIndicator(
         onRefresh: () async {
@@ -295,7 +289,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Summary Stat Cards
+              // Interactive Analytics Cards
               summaryAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, s) => Text('Summary error: $e', style: const TextStyle(color: AppTheme.danger)),
@@ -311,9 +305,25 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
 
               // Search Results (if active)
               if (_isSearching && _searchResults != null) ...[
-                Text(
-                  'Search Results (${_searchResults!.length})',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Search Results (${_searchResults!.length})',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _searchController.clear();
+                          _selectedStatusFilter = 'ALL';
+                          _isSearching = false;
+                          _searchResults = null;
+                        });
+                      },
+                      child: const Text('Clear Search'),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 10),
                 ..._searchResults!.map((g) => _buildGrievanceCard(g)),
@@ -344,9 +354,9 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
 
               const SizedBox(height: 24),
 
-              // Department Workload Overview
+              // Department Workload Overview (Interactive Taps)
               const Text(
-                'Department Workload Distribution',
+                'Department Workload Distribution (Tap to filter)',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue),
               ),
               const SizedBox(height: 10),
@@ -363,52 +373,110 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
   }
 
   Widget _buildSummaryCards(OfficialDashboardSummaryModel summary) {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
-      childAspectRatio: 2.2,
+    return Column(
       children: [
-        _buildStatCard('Total Grievances', summary.totalGrievances.toString(), Icons.folder_open_rounded, AppTheme.primaryBlue),
-        _buildStatCard('Pending Review', summary.pending.toString(), Icons.pending_actions_rounded, AppTheme.warning),
-        _buildStatCard('High Priority', summary.highPriority.toString(), Icons.priority_high_rounded, AppTheme.danger),
-        _buildStatCard('Clarification Req.', summary.clarificationRequired.toString(), Icons.help_outline_rounded, const Color(0xFF7C3AED)),
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatCard(
+                'Total Grievances',
+                summary.totalGrievances.toString(),
+                Icons.folder_open_rounded,
+                AppTheme.primaryBlue,
+                () {
+                  setState(() {
+                    _searchController.clear();
+                    _selectedStatusFilter = 'ALL';
+                    _isSearching = false;
+                    _searchResults = null;
+                  });
+                },
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildStatCard(
+                'Pending Review',
+                summary.pending.toString(),
+                Icons.pending_actions_rounded,
+                AppTheme.warning,
+                () {
+                  _triggerSearch(status: 'intake_received');
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatCard(
+                'High Priority',
+                summary.highPriority.toString(),
+                Icons.priority_high_rounded,
+                AppTheme.danger,
+                () {
+                  _triggerSearch(priority: 'high');
+                },
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildStatCard(
+                'Clarification Req.',
+                summary.clarificationRequired.toString(),
+                Icons.help_outline_rounded,
+                const Color(0xFF7C3AED),
+                () {
+                  _triggerSearch(status: 'clarification_required');
+                },
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
 
-  Widget _buildStatCard(String label, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardTheme.color,
+  Widget _buildStatCard(String label, String value, IconData icon, Color color, VoidCallback onTap) {
+    return Card(
+      elevation: 1,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.borderLight),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: color)),
-                Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary), overflow: TextOverflow.ellipsis),
-              ],
-            ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: color, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: color)),
+                    Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary), overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -440,7 +508,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
               const SizedBox(width: 8),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
-                onPressed: _triggerSearch,
+                onPressed: () => _triggerSearch(),
                 child: const Text('Search', style: TextStyle(color: Colors.white)),
               ),
             ],
@@ -479,46 +547,50 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      child: Padding(
-        padding: const EdgeInsets.all(14.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(item.grievanceNumber, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppTheme.primaryBlue)),
-                Chip(
-                  label: Text(item.status.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
-                  backgroundColor: _getStatusColor(item.status),
-                ),
+      child: InkWell(
+        onTap: () => context.push('/official/grievance/${item.id}'),
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.all(14.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(item.grievanceNumber, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppTheme.primaryBlue)),
+                  Chip(
+                    label: Text(item.status.replaceAll('_', ' ').toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
+                    backgroundColor: _getStatusColor(item.status),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(item.title ?? 'No title provided', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+              if (item.departmentId != null) ...[
+                const SizedBox(height: 4),
+                Text('Assigned Dept: ${item.departmentId}', style: const TextStyle(color: AppTheme.primaryBlue, fontWeight: FontWeight.bold, fontSize: 12)),
               ],
-            ),
-            const SizedBox(height: 6),
-            Text(item.title ?? 'No title provided', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-            if (item.departmentId != null) ...[
-              const SizedBox(height: 4),
-              Text('Assigned Dept: ${item.departmentId}', style: const TextStyle(color: AppTheme.primaryBlue, fontWeight: FontWeight.bold, fontSize: 12)),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/official/grievance/${item.id}'),
+                    icon: const Icon(Icons.description_outlined, size: 14),
+                    label: const Text('View File', style: TextStyle(fontSize: 12)),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
+                    onPressed: () => _showActionDialog(item),
+                    icon: const Icon(Icons.gavel_rounded, size: 14, color: Colors.white),
+                    label: const Text('Take Action', style: TextStyle(color: Colors.white, fontSize: 12)),
+                  ),
+                ],
+              ),
             ],
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: () => context.push('/official/grievance/${item.id}'),
-                  icon: const Icon(Icons.description_outlined, size: 14),
-                  label: const Text('View File', style: TextStyle(fontSize: 12)),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
-                  onPressed: () => _showActionDialog(item),
-                  icon: const Icon(Icons.gavel_rounded, size: 14, color: Colors.white),
-                  label: const Text('Take Action', style: TextStyle(color: Colors.white, fontSize: 12)),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -527,33 +599,34 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
   Widget _buildWorkloadList(List<DepartmentWorkloadModel> workloads) {
     return Column(
       children: workloads.map((w) {
-        return Container(
+        return Card(
           margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardTheme.color,
+          child: InkWell(
+            onTap: () => _triggerSearch(departmentId: w.departmentName),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.borderLight),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  w.departmentName,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                ),
-              ),
-              Row(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildMiniBadge('Pending: ${w.pending}', AppTheme.warning),
-                  const SizedBox(width: 4),
-                  _buildMiniBadge('Forwarded: ${w.forwarded}', AppTheme.primaryBlue),
-                  const SizedBox(width: 4),
-                  _buildMiniBadge('Total: ${w.total}', AppTheme.textMuted),
+                  Expanded(
+                    child: Text(
+                      w.departmentName,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      _buildMiniBadge('Pending: ${w.pending}', AppTheme.warning),
+                      const SizedBox(width: 4),
+                      _buildMiniBadge('Forwarded: ${w.forwarded}', AppTheme.primaryBlue),
+                      const SizedBox(width: 4),
+                      _buildMiniBadge('Total: ${w.total}', AppTheme.textMuted),
+                    ],
+                  ),
                 ],
               ),
-            ],
+            ),
           ),
         );
       }).toList(),

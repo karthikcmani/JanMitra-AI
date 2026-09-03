@@ -4,6 +4,7 @@ class UserModel {
   final String email;
   final String phone;
   final String? role;
+  final String? departmentId;
   final bool isActive;
   final DateTime? createdAt;
 
@@ -13,6 +14,7 @@ class UserModel {
     required this.email,
     required this.phone,
     this.role = 'citizen',
+    this.departmentId,
     this.isActive = true,
     this.createdAt,
   });
@@ -24,6 +26,7 @@ class UserModel {
       'email': email,
       'phone': phone,
       'role': role,
+      if (departmentId != null) 'department_id': departmentId,
       'is_active': isActive,
       if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
     };
@@ -36,6 +39,7 @@ class UserModel {
       email: (json['email'] ?? '') as String,
       phone: (json['phone'] ?? '') as String,
       role: (json['role'] ?? 'citizen') as String,
+      departmentId: json['department_id']?.toString() ?? json['departmentId']?.toString(),
       isActive: (json['is_active'] ?? json['isActive'] ?? true) as bool,
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString())
