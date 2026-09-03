@@ -297,143 +297,146 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     required int pending,
     required int resolved,
   }) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return GridView.count(
-          crossAxisCount: 3,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          childAspectRatio: constraints.maxWidth > 360 ? 0.95 : 0.85,
-          children: [
-            StatCard(
-              title: 'Total',
-              count: total.toString().padLeft(2, '0'),
-              icon: Icons.folder_open_rounded,
-              iconColor: AppTheme.primaryBlue,
-              iconBgColor: const Color(0xFFE0F2FE),
-              subtitle: 'Grievances',
-              onTap: () => MainCitizenShellController.of(context)?.onSelectTab(1),
-            ),
-            StatCard(
-              title: 'Pending',
-              count: pending.toString().padLeft(2, '0'),
-              icon: Icons.hourglass_top_rounded,
-              iconColor: AppTheme.warning,
-              iconBgColor: const Color(0xFFFEF3C7),
-              subtitle: 'In Progress',
-              onTap: () => MainCitizenShellController.of(context)?.onSelectTab(1),
-            ),
-            StatCard(
-              title: 'Resolved',
-              count: resolved.toString().padLeft(2, '0'),
-              icon: Icons.check_circle_outline_rounded,
-              iconColor: AppTheme.success,
-              iconBgColor: const Color(0xD1D1FADF),
-              subtitle: 'Completed',
-              onTap: () => MainCitizenShellController.of(context)?.onSelectTab(1),
-            ),
-          ],
-        );
-      },
+    return Row(
+      children: [
+        Expanded(
+          child: StatCard(
+            title: 'Total',
+            count: total.toString().padLeft(2, '0'),
+            icon: Icons.folder_open_rounded,
+            iconColor: AppTheme.primaryBlue,
+            iconBgColor: const Color(0xFFE0F2FE),
+            subtitle: 'Grievances',
+            onTap: () => MainCitizenShellController.of(context)?.onSelectTab(1),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: StatCard(
+            title: 'Pending',
+            count: pending.toString().padLeft(2, '0'),
+            icon: Icons.hourglass_top_rounded,
+            iconColor: AppTheme.warning,
+            iconBgColor: const Color(0xFFFEF3C7),
+            subtitle: 'In Progress',
+            onTap: () => MainCitizenShellController.of(context)?.onSelectTab(1),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: StatCard(
+            title: 'Resolved',
+            count: resolved.toString().padLeft(2, '0'),
+            icon: Icons.check_circle_outline_rounded,
+            iconColor: AppTheme.success,
+            iconBgColor: const Color(0xD1D1FADF),
+            subtitle: 'Completed',
+            onTap: () => MainCitizenShellController.of(context)?.onSelectTab(1),
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildQuickActionsGrid(BuildContext context) {
-    final actions = [
-      {
-        'title': 'New Grievance',
-        'subtitle': 'File a complaint',
-        'icon': Icons.add_circle_outline_rounded,
-        'color': AppTheme.primaryBlue,
-        'bgColor': const Color(0xFFE0F2FE),
-        'onTap': () => context.push('/complaints/new'),
-      },
-      {
-        'title': 'My Complaints',
-        'subtitle': 'View all submitted',
-        'icon': Icons.assignment_outlined,
-        'color': AppTheme.secondaryTeal,
-        'bgColor': const Color(0xFFCCFBF1),
-        'onTap': () => MainCitizenShellController.of(context)?.onSelectTab(1),
-      },
-      {
-        'title': 'Track Status',
-        'subtitle': 'Timeline & stages',
-        'icon': Icons.my_location_rounded,
-        'color': const Color(0xFF7C3AED),
-        'bgColor': const Color(0xFFEDE9FE),
-        'onTap': () => MainCitizenShellController.of(context)?.onSelectTab(2),
-      },
-      {
-        'title': 'Citizen Profile',
-        'subtitle': 'User & settings',
-        'icon': Icons.person_outline_rounded,
-        'color': AppTheme.warning,
-        'bgColor': const Color(0xFFFEF3C7),
-        'onTap': () => MainCitizenShellController.of(context)?.onSelectTab(3),
-      },
-    ];
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionTile(
+                context,
+                title: 'New Grievance',
+                subtitle: 'File a complaint',
+                icon: Icons.add_circle_outline_rounded,
+                color: AppTheme.primaryBlue,
+                bgColor: const Color(0xFFE0F2FE),
+                onTap: () => context.push('/complaints/new'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildActionTile(
+                context,
+                title: 'My Complaints',
+                subtitle: 'View all submitted',
+                icon: Icons.assignment_outlined,
+                color: AppTheme.secondaryTeal,
+                bgColor: const Color(0xFFCCFBF1),
+                onTap: () => MainCitizenShellController.of(context)?.onSelectTab(1),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionTile(
+                context,
+                title: 'Track Status',
+                subtitle: 'Timeline & stages',
+                icon: Icons.my_location_rounded,
+                color: const Color(0xFF7C3AED),
+                bgColor: const Color(0xFFEDE9FE),
+                onTap: () => MainCitizenShellController.of(context)?.onSelectTab(2),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildActionTile(
+                context,
+                title: 'Citizen Profile',
+                subtitle: 'User & settings',
+                icon: Icons.person_outline_rounded,
+                color: AppTheme.warning,
+                bgColor: const Color(0xFFFEF3C7),
+                onTap: () => MainCitizenShellController.of(context)?.onSelectTab(3),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 1.4,
-      ),
-      itemCount: actions.length,
-      itemBuilder: (context, index) {
-        final item = actions[index];
-        return InkWell(
-          onTap: item['onTap'] as VoidCallback,
+  Widget _buildActionTile(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required Color bgColor,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppConstants.cardRadius),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardTheme.color,
           borderRadius: BorderRadius.circular(AppConstants.cardRadius),
-          child: Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardTheme.color,
-              borderRadius: BorderRadius.circular(AppConstants.cardRadius),
-              border: Border.all(color: AppTheme.borderLight),
+          border: Border.all(color: AppTheme.borderLight),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: color, size: 22),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: item['bgColor'] as Color,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    item['icon'] as IconData,
-                    size: 22,
-                    color: item['color'] as Color,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  item['title'] as String,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                Text(
-                  item['subtitle'] as String,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+            const SizedBox(height: 10),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 10), overflow: TextOverflow.ellipsis),
+          ],
+        ),
+      ),
     );
   }
 
