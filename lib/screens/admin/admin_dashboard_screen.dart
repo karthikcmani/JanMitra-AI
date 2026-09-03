@@ -67,9 +67,37 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   void _showAdminActionDialog(GrievanceModel item) {
     final remarksController = TextEditingController();
     final questionController = TextEditingController();
-    String selectedStatus = item.status;
-    String selectedDept = item.departmentId ?? 'Kerala Water Authority (KWA)';
 
+    const allowedDepts = [
+      'Kerala Water Authority (KWA)',
+      'Public Works Department (PWD)',
+      'Kerala State Electricity Board (KSEB)',
+      'Local Self Government Department (LSGD / Panchayat)',
+      'Revenue & General Administration',
+    ];
+
+    const allowedStatuses = [
+      'forwarded',
+      'clarification_required',
+      'under_processing',
+      'under_analysis',
+      'intake_received',
+      'resolved',
+    ];
+
+    String getInitialDept(GrievanceModel g) {
+      final dept = g.departmentId ?? g.predictedDepartment ?? '';
+      if (allowedDepts.contains(dept)) return dept;
+      if (dept.contains('KWA') || dept.contains('Water')) return 'Kerala Water Authority (KWA)';
+      if (dept.contains('PWD') || dept.contains('Works')) return 'Public Works Department (PWD)';
+      if (dept.contains('KSEB') || dept.contains('Electricity')) return 'Kerala State Electricity Board (KSEB)';
+      if (dept.contains('LSGD') || dept.contains('Panchayat')) return 'Local Self Government Department (LSGD / Panchayat)';
+      if (dept.contains('Revenue')) return 'Revenue & General Administration';
+      return 'Kerala Water Authority (KWA)';
+    }
+
+    String selectedStatus = allowedStatuses.contains(item.status.toLowerCase()) ? item.status.toLowerCase() : 'forwarded';
+    String selectedDept = getInitialDept(item);
 
     showDialog(
       context: context,
@@ -142,6 +170,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                       DropdownMenuItem(value: 'forwarded', child: Text('Forward to Department')),
                       DropdownMenuItem(value: 'clarification_required', child: Text('Request Citizen Clarification')),
                       DropdownMenuItem(value: 'under_processing', child: Text('Mark Under Active Processing')),
+                      DropdownMenuItem(value: 'under_analysis', child: Text('Under AI Analysis')),
+                      DropdownMenuItem(value: 'intake_received', child: Text('Intake Received')),
                       DropdownMenuItem(value: 'resolved', child: Text('Mark Resolved & Closed')),
                     ],
                     onChanged: (val) {
@@ -349,6 +379,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                               items: const [
                                 DropdownMenuItem(value: 'ALL', child: Text('All Statuses')),
                                 DropdownMenuItem(value: 'intake_received', child: Text('Intake Received')),
+                                DropdownMenuItem(value: 'under_analysis', child: Text('Under Analysis')),
                                 DropdownMenuItem(value: 'under_processing', child: Text('Under Processing')),
                                 DropdownMenuItem(value: 'clarification_required', child: Text('Clarification Required')),
                                 DropdownMenuItem(value: 'forwarded', child: Text('Forwarded')),
@@ -437,8 +468,70 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   children: workloads.map((w) => _buildWorkloadCard(w)).toList(),
                 ),
               ),
+
+              const SizedBox(height: 24),
+
+              // Registered Official Roster & Staff Management
+              const Text('Statewide Government Official Roster', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 10),
+              ref.watch(officialUsersProvider).when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, s) => const SizedBox.shrink(),
+                data: (officials) {
+                  if (officials.isEmpty) {
+                    return const Card(
+                      child: Padding(
+                        padding: EdgeInsets.all(12.0),
+                        child: Text('No registered department officials found.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      ),
+                    );
+                  }
+                  return Column(
+                    children: officials.map((u) => _buildOfficialUserCard(u)).toList(),
+                  );
+                },
+              ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOfficialUserCard(Map<String, dynamic> user) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Row(
+          children: [
+            const CircleAvatar(
+              backgroundColor: AppTheme.primaryBlue,
+              radius: 18,
+              child: Icon(Icons.badge_rounded, color: Colors.white, size: 18),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(user['full_name'] ?? 'Official User', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  Text(
+                    'Dept: ${user['department_id']} • Email: ${user['email']} • Phone: ${user['phone'] ?? "N/A"}',
+                    style: const TextStyle(fontSize: 11, color: Colors.black54),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppTheme.success.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text('Active Staff', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.success)),
+            ),
+          ],
         ),
       ),
     );
@@ -597,6 +690,10 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         return Colors.indigo;
       case 'under_processing':
         return AppTheme.secondaryTeal;
+      case 'under_analysis':
+        return Colors.blue;
+      case 'intake_received':
+        return Colors.amber;
       default:
         return Colors.orange;
     }

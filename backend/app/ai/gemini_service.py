@@ -44,7 +44,7 @@ class GeminiGrievanceAnalyzer:
             or os.getenv("GOOGLE_API_KEY")
             or getattr(settings, "GEMINI_API_KEY", None)
         )
-        self.model = "gemini-2.0-flash"
+        self.model = "gemini-3.6-flash"
         self.endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent"
 
     async def analyze_grievance(self, grievance_text: str) -> Optional[GeminiAnalysisResult]:

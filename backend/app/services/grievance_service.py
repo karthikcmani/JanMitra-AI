@@ -47,13 +47,17 @@ class GrievanceService:
             grievance_number=grievance_no,
         )
 
-        # Trigger AI analysis for direct_text grievances immediately
-        if draft_in.intake_mode == "direct_text" or draft_in.original_text or draft_in.description:
+        # Trigger AI analysis for direct_text grievances immediately and transition status to INTAKE_RECEIVED
+        if draft_in.intake_mode == "direct_text" and (draft_in.original_text or draft_in.title):
             try:
+                from app.models.grievance_model import GrievanceStatus
+                db_grievance.status = GrievanceStatus.INTAKE_RECEIVED
+                await self.repo.db.flush()
+
                 from app.services.official_service import OfficialService
                 official_service = OfficialService(self.repo.db)
-                await official_service.process_grievance_ai(db_grievance.id)
-                # Refresh to load AI analysis and updated department/status
+                await official_service.process_document_and_route(db_grievance.id, citizen_id)
+
                 refreshed = await self.repo.get_by_id(db_grievance.id)
                 if refreshed:
                     db_grievance = refreshed
@@ -274,11 +278,12 @@ class GrievanceService:
             actor_id=citizen_id,
         )
 
-        # 5. Update grievance original_text if draft
+        # 5. Keep grievance status as DRAFT until citizen explicitly verifies & confirms
         if result.extraction_status == ExtractionStatus.COMPLETED and result.extracted_text:
             if not grievance.original_text:
                 grievance.original_text = result.extracted_text
-                grievance.status = GrievanceStatus.INTAKE_RECEIVED
+                # Keep status strictly as DRAFT - do NOT transition to INTAKE_RECEIVED or trigger official routing yet!
+                grievance.status = GrievanceStatus.DRAFT
                 await self.repo.db.flush()
 
         # 6. Return NormalizedExtractionResult
@@ -306,22 +311,31 @@ class GrievanceService:
             )
 
         prev_status = grievance.status
-        grievance.status = GrievanceStatus.UNDER_PROCESSING
+        grievance.original_text = response_text
+        grievance.status = GrievanceStatus.INTAKE_RECEIVED
 
         audit_log = GrievanceAuditLog(
             id=str(uuid.uuid4()),
             grievance_id=grievance_id,
             actor_id=citizen_id,
             actor_role="citizen",
-            action_type="CLARIFICATION_PROVIDED",
+            action_type="EXPLICIT_VERIFICATION_CONFIRMED",
             previous_state=prev_status,
             new_state=grievance.status,
-            remarks=f"Citizen Clarification Response: {response_text}",
+            remarks=f"Citizen explicitly verified and confirmed petition text: {response_text[:100]}...",
         )
         self.repo.db.add(audit_log)
         await self.repo.db.commit()
-        self.repo.db.expire_all()
 
+        # Trigger AI analysis and department routing
+        try:
+            from app.services.official_service import OfficialService
+            official_service = OfficialService(self.repo.db)
+            await official_service.process_document_and_route(grievance.id, citizen_id)
+        except Exception:
+            pass
+
+        self.repo.db.expire_all()
         updated = await self.repo.get_user_grievance(grievance_id, citizen_id)
         return GrievanceResponse.model_validate(updated)
 

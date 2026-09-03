@@ -527,32 +527,41 @@ class GeminiVisionOCRAdapter(BaseExtractionAdapter):
             )
 
         prompt = (
-            "Transcribe the uploaded document exactly as written.\n\n"
-            "The document may contain handwritten Malayalam and English.\n\n"
-            "Preserve Malayalam script.\n\n"
-            "Do not translate.\n\n"
-            "Do not summarize.\n\n"
-            "Do not infer missing words.\n\n"
-            "Do not invent content.\n\n"
-            "Preserve dates, numbers, names, addresses, ward numbers, "
-            "department names and abbreviations.\n\n"
-            "Return only the transcription."
+            "You are an expert OCR transcription engine for Malayalam and English public grievance petitions.\n\n"
+            "INSTRUCTIONS:\n"
+            "1. Transcribe the document text exactly as written. Preserve all Malayalam script, English text, names, dates, numbers, ward/panchayat locations, and department references.\n"
+            "2. Do NOT translate the text.\n"
+            "3. Do NOT summarize or invent missing content.\n"
+            "4. If a word or section is genuinely unreadable, indicate '[Unreadable]' explicitly instead of guessing.\n\n"
+            "Provide the exact transcription followed by an '--- EXTRACTED KEYWORDS & SUMMARY ---' section listing the extracted subject title and main problem keywords."
         )
 
         # 1. Try Direct REST API call (Fast & Zero SDK dependency)
         try:
             import base64
             import httpx
+            from io import BytesIO
+            from PIL import Image, ImageFile
+            ImageFile.LOAD_TRUNCATED_IMAGES = True
 
-            file_bytes = file_path.read_bytes()
-            encoded_bytes = base64.b64encode(file_bytes).decode("utf-8")
-
-            # Determine mime type
-            mime_type = attachment.mime_type or "image/jpeg"
-            if file_path.suffix.lower() in [".png"]:
-                mime_type = "image/png"
-            elif file_path.suffix.lower() in [".webp"]:
-                mime_type = "image/webp"
+            ext = file_path.suffix.lower()
+            if ext in [".jpg", ".jpeg", ".png", ".webp"]:
+                try:
+                    img = Image.open(file_path).convert("RGB")
+                    if max(img.size) > 2048:
+                        img.thumbnail((2048, 2048))
+                    buf = BytesIO()
+                    img.save(buf, format="JPEG", quality=90)
+                    encoded_bytes = base64.b64encode(buf.getvalue()).decode("utf-8")
+                    mime_type = "image/jpeg"
+                except Exception:
+                    file_bytes = file_path.read_bytes()
+                    encoded_bytes = base64.b64encode(file_bytes).decode("utf-8")
+                    mime_type = attachment.mime_type or "image/jpeg"
+            else:
+                file_bytes = file_path.read_bytes()
+                encoded_bytes = base64.b64encode(file_bytes).decode("utf-8")
+                mime_type = attachment.mime_type or "image/jpeg"
 
             payload = {
                 "contents": [
@@ -570,7 +579,12 @@ class GeminiVisionOCRAdapter(BaseExtractionAdapter):
                 ]
             }
 
-            models_to_try = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-3.5-flash", "gemini-pro-latest"]
+            models_to_try = [
+                "gemini-3.6-flash",
+                "gemini-3.5-flash",
+                "gemini-3.5-flash-lite",
+                "gemini-3-flash",
+            ]
             last_error_msg = None
             async with httpx.AsyncClient(timeout=45.0) as client:
                 for model_name in models_to_try:
@@ -591,7 +605,7 @@ class GeminiVisionOCRAdapter(BaseExtractionAdapter):
                                     extracted_text=extracted_text,
                                     extraction_status=ExtractionStatus.COMPLETED,
                                     confidence_score=None,
-                                    engine_name=engine_name,
+                                    engine_name=f"gemini_vision_ocr_{model_name.replace('-', '_')}",
                                     processed_at=now,
                                 )
                     else:
@@ -609,9 +623,9 @@ class GeminiVisionOCRAdapter(BaseExtractionAdapter):
 
             genai.configure(api_key=api_key)
             try:
-                model = genai.GenerativeModel("gemini-2.0-flash")
+                model = genai.GenerativeModel("gemini-3.6-flash")
             except Exception:
-                model = genai.GenerativeModel("gemini-1.5-flash")
+                model = genai.GenerativeModel("gemini-3.5-flash")
 
             img = Image.open(file_path)
             response = await asyncio.to_thread(model.generate_content, [prompt, img])
