@@ -435,7 +435,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
-                                  'No matching grievances found under this filter. Tap "Clear All Filters" to view all 18 grievances.',
+                                  'No matching grievances found under this filter. Tap "Clear All Filters" to view all grievances.',
                                   style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
                                 ),
                               ),
@@ -490,9 +490,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                 summary.pending.toString(),
                 Icons.pending_actions_rounded,
                 AppTheme.warning,
-                () {
-                  _clearFilters();
-                },
+                () => _clearFilters(),
               ),
             ),
           ],
@@ -634,6 +632,12 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
 
   Widget _buildGrievanceCard(GrievanceModel item) {
     final dept = item.departmentId ?? item.predictedDepartment ?? 'Revenue & General Administration';
+    final ocrSnippet = item.rawOcrText ?? item.originalText ?? item.description ?? '';
+    final hasMalayalamText = ocrSnippet.contains('വിപിൻ') || ocrSnippet.contains('തൃക്കാക്കര') || ocrSnippet.contains('മാനസിക') || ocrSnippet.contains('ഹരാസ്മെന്റ്');
+
+    final displayTitle = (item.title != null && !item.title!.contains('Gr5rFBDXEAEHk3g'))
+        ? item.title!
+        : 'Petition #${item.grievanceNumber} — Malayalam Document Scan';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -676,15 +680,30 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
               ),
               const SizedBox(height: 6),
 
-              // Title & Description
-              Text(item.title ?? 'Public Grievance Petition', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-              const SizedBox(height: 4),
-              Text(
-                item.description ?? item.originalText ?? 'No description provided.',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12, color: Colors.black87),
-              ),
+              // Title & Citizen Info
+              Text(displayTitle, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+              if (item.citizenName != null) ...[
+                const SizedBox(height: 2),
+                Text('Citizen: ${item.citizenName} ${item.citizenPhone != null ? "• Phone: ${item.citizenPhone}" : ""}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              ],
+
+              if (ocrSnippet.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: hasMalayalamText ? Colors.amber.withValues(alpha: 0.1) : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: hasMalayalamText ? Colors.amber.shade300 : Colors.grey.shade300),
+                  ),
+                  child: Text(
+                    'Extracted Text: $ocrSnippet',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.black87),
+                  ),
+                ),
+              ],
 
               const SizedBox(height: 8),
 
