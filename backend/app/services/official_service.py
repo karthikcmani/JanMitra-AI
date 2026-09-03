@@ -464,8 +464,11 @@ class OfficialService:
         matched = [g for g in grievances if g.id == grievance_id]
         return matched[0] if matched else grievances[0]
 
-    async def get_dashboard_summary(self) -> OfficialDashboardSummaryResponse:
+    async def get_dashboard_summary(self, department_id: Optional[str] = None) -> OfficialDashboardSummaryResponse:
         all_grievances = await self.get_all_official_grievances()
+        if department_id:
+            all_grievances = await self.search_official_grievances(department_id=department_id)
+
         total = len(all_grievances)
 
         pending_count = sum(1 for g in all_grievances if g.status in ("draft", "intake_received", "under_analysis"))
@@ -543,8 +546,10 @@ class OfficialService:
 
         return filtered
 
-    async def get_attention_queue(self) -> List[OfficialGrievanceDetailResponse]:
+    async def get_attention_queue(self, department_id: Optional[str] = None) -> List[OfficialGrievanceDetailResponse]:
         all_grievances = await self.get_all_official_grievances()
+        if department_id:
+            all_grievances = await self.search_official_grievances(department_id=department_id)
 
         def attention_sort_key(g: OfficialGrievanceDetailResponse):
             priority_score = 0
