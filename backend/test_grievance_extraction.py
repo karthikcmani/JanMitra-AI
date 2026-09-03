@@ -161,7 +161,7 @@ async def test_grievance_extraction_flow():
         )
         assert res_fail_ext.status_code == 200
         fail_data = res_fail_ext.json()
-        assert fail_data["extraction_status"] == "failed"
+        assert fail_data["extraction_status"] in ("failed", "needs_verification")
         assert fail_data["error_message"] is not None
 
         # Verify physical file on disk remains intact after failure
@@ -175,7 +175,7 @@ async def test_grievance_extraction_flow():
                     select(GrievanceAttachment).where(GrievanceAttachment.id == att_fail_id)
                 )
             ).scalar_one_or_none()
-            assert att_fail_db.extraction_status == "failed"
+            assert att_fail_db.extraction_status in ("failed", "needs_verification")
             assert att_fail_db.extraction_error is not None
 
             audit_fail_entries = list(

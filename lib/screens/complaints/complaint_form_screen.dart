@@ -412,100 +412,109 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
         // Extraction Completed Display & Verification Area
         if (state.extractionStep == IntakeExtractionStep.completed) ...[
           const SizedBox(height: 16),
-          // AI/OCR Raw Extracted Text Card
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade50.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.blue.shade200),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.smart_toy_rounded, size: 18, color: AppTheme.primaryBlue),
-                        SizedBox(width: 6),
-                        Text(
-                          'AI / OCR Extracted Raw Text',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+          if (state.rawExtractedText != null && state.rawExtractedText!.isNotEmpty) ...[
+            // AI/OCR Raw Extracted Text Card
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.smart_toy_rounded, size: 18, color: AppTheme.primaryBlue),
+                          SizedBox(width: 6),
+                          Text(
+                            'AI / OCR Extracted Raw Text',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryBlue,
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                      ],
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryBlue,
-                        borderRadius: BorderRadius.circular(12),
+                        child: Text(
+                          'Engine: ${state.extractionResult?.engineName ?? "gemini_vision_ocr_v1"}',
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
                       ),
-                      child: Text(
-                        'Engine: ${state.extractionResult?.engineName ?? "google_cloud_vision_v1"}',
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  state.rawExtractedText ?? '',
-                  style: const TextStyle(fontSize: 14, height: 1.4, color: Colors.black87),
-                ),
-                if (state.extractionResult?.confidenceScore != null) ...[
+                    ],
+                  ),
                   const SizedBox(height: 8),
                   Text(
-                    'Derived OCR Confidence Score: ${(state.extractionResult!.confidenceScore! * 100).toStringAsFixed(1)}%',
-                    style: TextStyle(fontSize: 11, color: Colors.blue.shade800, fontWeight: FontWeight.w600),
+                    state.rawExtractedText ?? '',
+                    style: const TextStyle(fontSize: 14, height: 1.4, color: Colors.black87),
                   ),
                 ],
-                if (state.extractionResult?.engineName.contains('easyocr') == true) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.amber.shade300),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.bolt_rounded, size: 18, color: Colors.amber.shade900),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            'Gemini AI Vision quota limit reached. Processed via local offline OCR. Please review & edit the text below before explicit confirmation.',
-                            style: TextStyle(fontSize: 11, color: Colors.amber.shade900, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
+              ),
             ),
-          ),
+          ] else ...[
+            // Automatic OCR Unavailable / Manual Verification Card
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.amber.shade300),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.info_outline_rounded, color: Colors.amber.shade900, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Automatic Text Extraction Temporarily Unavailable',
+                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber.shade900, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Automatic text extraction is temporarily unavailable. Please enter or verify the complaint text manually. Your original document is attached.',
+                    style: TextStyle(fontSize: 12, height: 1.4, color: Colors.black87),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'ഓട്ടോമാറ്റിക് ടെക്സ്റ്റ് വേർതിരിച്ചെടുക്കൽ താൽക്കാലികമായി ലഭ്യമായിട്ടില്ല. ദയവായി പരാതി വിവരങ്ങൾ താഴെ എഴുതുക / നൽകുക.',
+                    style: TextStyle(fontSize: 12, height: 1.4, color: Colors.grey.shade800),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 20),
 
           // Citizen Review & Verification Editable Field
           const Text(
-            'Citizen Verification & Correction (Required)',
+            'Citizen Petition Text Entry / Verification (Required)',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
           ),
           const SizedBox(height: 4),
           const Text(
-            'Please review and correct any Malayalam text misinterpretations before confirming.',
+            'Please enter or verify the petition text below before confirming.',
             style: TextStyle(fontSize: 12, color: Colors.grey),
           ),
           const SizedBox(height: 8),
           TextFormField(
             controller: _verifiedTextController,
-            maxLines: 5,
+            maxLines: 6,
             decoration: const InputDecoration(
               border: OutlineInputBorder(),
-              hintText: 'Verified Malayalam petition text...',
+              hintText: 'Type or verify your petition text here (Malayalam / English)...',
             ),
             style: const TextStyle(fontSize: 15),
           ),
@@ -513,8 +522,9 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
 
           // Explicit Confirmation Button
           CustomButton(
-            text: 'Explicitly Confirm Extracted Text & Register Grievance',
+            text: 'Confirm Petition Text & Register Grievance',
             onPressed: _confirmAndSubmitHandwritten,
+            isLoading: state.isLoading,
             backgroundColor: AppTheme.success,
           ),
         ],

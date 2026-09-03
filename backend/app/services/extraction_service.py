@@ -717,11 +717,11 @@ class GeminiVisionOCRAdapter(BaseExtractionAdapter):
             source_attachment_id=attachment.id,
             original_language="ml",
             extracted_text=None,
-            extraction_status=ExtractionStatus.FAILED,
+            extraction_status=ExtractionStatus.NEEDS_VERIFICATION,
             confidence_score=None,
             engine_name=engine_name,
             processed_at=now,
-            error_message=last_error_msg or "Real OCR failed: Gemini Vision API call unsuccessful or credentials invalid.",
+            error_message=last_error_msg or "Automatic text extraction is temporarily unavailable. Please enter or verify the complaint text manually.",
         )
 
 
@@ -771,7 +771,7 @@ class FastAutoExtractionAdapter(BaseExtractionAdapter):
             mock = MockExtractionAdapter()
             return await mock.extract_content(attachment, file_path)
 
-        # 6. Real upload fallback: If Gemini was attempted, return Gemini provider error directly
+        # 6. Real upload fallback: If Gemini was attempted, return Gemini result directly (which has NEEDS_VERIFICATION status)
         if gemini_res is not None:
             return gemini_res
 
@@ -781,11 +781,11 @@ class FastAutoExtractionAdapter(BaseExtractionAdapter):
             source_attachment_id=attachment.id,
             original_language="ml",
             extracted_text=None,
-            extraction_status=ExtractionStatus.FAILED,
+            extraction_status=ExtractionStatus.NEEDS_VERIFICATION,
             confidence_score=None,
             engine_name="none_available",
             processed_at=now,
-            error_message="OCR BLOCKED — GEMINI_API_KEY NOT AVAILABLE in environment.",
+            error_message="Automatic text extraction is temporarily unavailable. Please enter or verify the complaint text manually.",
         )
 
 

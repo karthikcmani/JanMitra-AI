@@ -86,5 +86,21 @@ class GrievanceRepository {
     );
     return GrievanceModel.fromJson(response.data as Map<String, dynamic>);
   }
+
+  /// Submits citizen verified / transcribed text for a grievance
+  Future<GrievanceModel> verifyGrievance({
+    required String grievanceId,
+    required String verifiedText,
+    String? attachmentId,
+  }) async {
+    final response = await apiService.post(
+      '/grievances/$grievanceId/verify',
+      data: {
+        'verified_text': verifiedText,
+        'attachment_id': attachmentId,
+      },
+    );
+    return GrievanceModel.fromJson(response.data as Map<String, dynamic>);
+  }
 }
 

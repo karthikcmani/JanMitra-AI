@@ -158,3 +158,26 @@ async def submit_citizen_clarification(
         response_text=clarification_in.response_text,
     )
 
+
+from app.schemas.grievance_schema import GrievanceVerificationRequest
+
+@router.post(
+    "/{grievance_id}/verify",
+    response_model=GrievanceResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Submit citizen verified / transcribed text for a grievance",
+)
+async def verify_grievance(
+    grievance_id: str,
+    verification_in: GrievanceVerificationRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user),
+):
+    service = GrievanceService(db)
+    return await service.verify_and_submit(
+        citizen_id=current_user.id,
+        grievance_id=grievance_id,
+        verified_text=verification_in.verified_text,
+        attachment_id=verification_in.attachment_id,
+    )
+
