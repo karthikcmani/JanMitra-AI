@@ -170,3 +170,17 @@ async def test_gemini_grievance_analyzer():
     assert res.category == "Water Supply & Drainage"
     assert res.department_name == "Kerala Water Authority (KWA)"
     assert res.confidence_score == 0.95
+
+
+@pytest.mark.asyncio
+async def test_gemini_ocr_adapter_never_selects_gemini_2_5_flash():
+    import inspect
+    from app.services.extraction_service import GeminiVisionOCRAdapter
+    from app.ai.gemini_service import GeminiGrievanceAnalyzer
+
+    source_ext = inspect.getsource(GeminiVisionOCRAdapter)
+    source_ai = inspect.getsource(GeminiGrievanceAnalyzer)
+
+    assert "gemini-2.5-flash" not in source_ext, "gemini-2.5-flash must not be present in extraction_service.py"
+    assert "gemini-2.5-flash" not in source_ai, "gemini-2.5-flash must not be present in gemini_service.py"
+
