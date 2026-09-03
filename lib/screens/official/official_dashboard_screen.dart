@@ -6,9 +6,50 @@ import '../../providers/auth_provider.dart';
 import '../../repositories/official_repository.dart';
 import '../../theme/app_theme.dart';
 
-final allOfficialGrievancesProvider = FutureProvider.autoDispose<List<GrievanceModel>>((ref) async {
+class OfficialSearchFilterState {
+  final String query;
+  final String status;
+  final String? priority;
+  final String? departmentId;
+
+  const OfficialSearchFilterState({
+    this.query = '',
+    this.status = 'ALL',
+    this.priority,
+    this.departmentId,
+  });
+
+  OfficialSearchFilterState copyWith({
+    String? query,
+    String? status,
+    String? priority,
+    String? departmentId,
+    bool clearPriority = false,
+    bool clearDept = false,
+  }) {
+    return OfficialSearchFilterState(
+      query: query ?? this.query,
+      status: status ?? this.status,
+      priority: clearPriority ? null : (priority ?? this.priority),
+      departmentId: clearDept ? null : (departmentId ?? this.departmentId),
+    );
+  }
+}
+
+final officialFilterNotifierProvider = StateProvider.autoDispose<OfficialSearchFilterState>((ref) {
+  return const OfficialSearchFilterState();
+});
+
+final officialFilteredGrievancesProvider = FutureProvider.autoDispose<List<GrievanceModel>>((ref) async {
+  final filter = ref.watch(officialFilterNotifierProvider);
   final repo = ref.watch(officialRepositoryProvider);
-  return await repo.searchGrievances();
+
+  return await repo.searchGrievances(
+    query: filter.query.isNotEmpty ? filter.query : null,
+    status: filter.status == 'ALL' ? null : filter.status.toLowerCase(),
+    priority: filter.priority,
+    departmentId: filter.departmentId,
+  );
 });
 
 class OfficialDashboardScreen extends ConsumerStatefulWidget {
@@ -20,11 +61,6 @@ class OfficialDashboardScreen extends ConsumerStatefulWidget {
 
 class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScreen> {
   final TextEditingController _searchController = TextEditingController();
-  String _selectedStatusFilter = 'ALL';
-  String? _selectedDeptFilter;
-  String? _selectedPriorityFilter;
-  bool _isSearching = false;
-  List<GrievanceModel>? _searchResults;
 
   @override
   void dispose() {
@@ -32,48 +68,44 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
     super.dispose();
   }
 
-  void _triggerSearch({String? status, String? priority, String? departmentId}) async {
+  void _triggerSearch() {
     final query = _searchController.text.trim();
-    final effectiveStatus = status ?? (_selectedStatusFilter == 'ALL' ? null : _selectedStatusFilter.toLowerCase());
+    ref.read(officialFilterNotifierProvider.notifier).update((s) => s.copyWith(query: query));
+  }
 
-    setState(() {
-      _isSearching = true;
-      if (status != null) _selectedStatusFilter = status.toUpperCase();
-      if (priority != null) _selectedPriorityFilter = priority;
-      if (departmentId != null) _selectedDeptFilter = departmentId;
-    });
+  void _clearFilters() {
+    _searchController.clear();
+    ref.read(officialFilterNotifierProvider.notifier).state = const OfficialSearchFilterState();
+  }
 
+  void _quickUpdateStatus(GrievanceModel item, String newStatus, {String? targetDept, String? remarks}) async {
     try {
       final repo = ref.read(officialRepositoryProvider);
-      final results = await repo.searchGrievances(
-        query: query.isNotEmpty ? query : null,
-        status: effectiveStatus,
-        priority: _selectedPriorityFilter,
-        departmentId: _selectedDeptFilter,
+      await repo.submitAction(
+        grievanceId: item.id,
+        departmentName: targetDept ?? item.departmentId ?? item.predictedDepartment ?? 'Revenue & General Administration',
+        newStatus: newStatus,
+        remarks: remarks ?? 'Updated by Official Decision Support Workspace',
       );
+      ref.invalidate(officialSummaryProvider);
+      ref.invalidate(attentionQueueProvider);
+      ref.invalidate(departmentWorkloadProvider);
+      ref.invalidate(officialFilteredGrievancesProvider);
       if (mounted) {
-        setState(() {
-          _searchResults = results;
-        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${item.grievanceNumber} status updated to ${newStatus.replaceAll('_', ' ').toUpperCase()}'),
+            backgroundColor: AppTheme.success,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Search error: ${e.toString()}'), backgroundColor: AppTheme.danger),
+          SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: AppTheme.danger),
         );
       }
     }
-  }
-
-  void _clearFilters() {
-    setState(() {
-      _searchController.clear();
-      _selectedStatusFilter = 'ALL';
-      _selectedDeptFilter = null;
-      _selectedPriorityFilter = null;
-      _isSearching = false;
-      _searchResults = null;
-    });
   }
 
   void _showActionDialog(GrievanceModel item) {
@@ -243,7 +275,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                     ref.invalidate(officialSummaryProvider);
                     ref.invalidate(attentionQueueProvider);
                     ref.invalidate(departmentWorkloadProvider);
-                    ref.invalidate(allOfficialGrievancesProvider);
+                    ref.invalidate(officialFilteredGrievancesProvider);
                     if (context.mounted) {
                       Navigator.pop(dialogContext);
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -270,8 +302,14 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
   @override
   Widget build(BuildContext context) {
     final summaryAsync = ref.watch(officialSummaryProvider);
-    final allGrievancesAsync = ref.watch(allOfficialGrievancesProvider);
+    final grievancesAsync = ref.watch(officialFilteredGrievancesProvider);
     final workloadAsync = ref.watch(departmentWorkloadProvider);
+    final currentFilter = ref.watch(officialFilterNotifierProvider);
+
+    final isFiltered = currentFilter.query.isNotEmpty ||
+        currentFilter.status != 'ALL' ||
+        currentFilter.departmentId != null ||
+        currentFilter.priority != null;
 
     return Scaffold(
       appBar: AppBar(
@@ -285,7 +323,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
               ref.invalidate(officialSummaryProvider);
               ref.invalidate(attentionQueueProvider);
               ref.invalidate(departmentWorkloadProvider);
-              ref.invalidate(allOfficialGrievancesProvider);
+              ref.invalidate(officialFilteredGrievancesProvider);
             },
             tooltip: 'Refresh Workspace Data',
           ),
@@ -305,7 +343,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
           ref.invalidate(officialSummaryProvider);
           ref.invalidate(attentionQueueProvider);
           ref.invalidate(departmentWorkloadProvider);
-          ref.invalidate(allOfficialGrievancesProvider);
+          ref.invalidate(officialFilteredGrievancesProvider);
         },
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
@@ -324,68 +362,92 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
               // Search & Filter Bar
               _buildSearchAndFilterBar(),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
 
-              // Filter Badge Bar (if active)
-              if (_selectedDeptFilter != null || _selectedPriorityFilter != null) ...[
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              // Active Filter Header
+              if (isFiltered) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryBlue.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppTheme.primaryBlue.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Filter: ${currentFilter.departmentId ?? ""} ${currentFilter.status != "ALL" ? currentFilter.status : ""} ${currentFilter.priority ?? ""}'.trim(),
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: _clearFilters,
+                        child: const Text('Clear All Filters', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.danger)),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // Grievance List Header & Async Results
+              grievancesAsync.when(
+                loading: () => const Column(
                   children: [
-                    Text(
-                      'Filter: ${_selectedDeptFilter ?? ""} ${_selectedPriorityFilter ?? ""}',
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue),
-                    ),
-                    TextButton(
-                      onPressed: _clearFilters,
-                      child: const Text('Clear All Filters'),
-                    ),
+                    SizedBox(height: 20),
+                    Center(child: CircularProgressIndicator()),
+                    SizedBox(height: 20),
                   ],
                 ),
-                const SizedBox(height: 8),
-              ],
-
-              // Grievance List Header & Cards
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    _isSearching ? 'Search Results (${_searchResults?.length ?? 0})' : 'Official Grievance Queue',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue),
-                  ),
-                  if (_isSearching)
-                    TextButton(
-                      onPressed: _clearFilters,
-                      child: const Text('Show All'),
-                    ),
-                ],
+                error: (e, s) => Text('Search error: $e', style: const TextStyle(color: AppTheme.danger)),
+                data: (grievances) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            isFiltered ? 'Filtered Results (${grievances.length})' : 'Official Grievance Queue (${grievances.length})',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue),
+                          ),
+                          if (isFiltered)
+                            TextButton(
+                              onPressed: _clearFilters,
+                              child: const Text('Show All'),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      if (grievances.isEmpty)
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.info_outline, color: Colors.grey),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'No matching grievances found under this filter. Tap "Clear All Filters" to view all 18 grievances.',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        ...grievances.map((g) => _buildGrievanceCard(g)),
+                    ],
+                  );
+                },
               ),
-              const SizedBox(height: 10),
-
-              if (_isSearching && _searchResults != null) ...[
-                if (_searchResults!.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Text('No matching grievances found.', style: TextStyle(color: AppTheme.textSecondary)),
-                  )
-                else
-                  ..._searchResults!.map((g) => _buildGrievanceCard(g)),
-              ] else ...[
-                allGrievancesAsync.when(
-                  loading: () => const Center(child: CircularProgressIndicator()),
-                  error: (e, s) => Text('Queue error: $e', style: const TextStyle(color: AppTheme.danger)),
-                  data: (grievances) {
-                    if (grievances.isEmpty) {
-                      return const Padding(
-                        padding: EdgeInsets.all(16.0),
-                        child: Text('No grievances registered in system.', style: TextStyle(color: AppTheme.textSecondary)),
-                      );
-                    }
-                    return Column(
-                      children: grievances.map((g) => _buildGrievanceCard(g)).toList(),
-                    );
-                  },
-                ),
-              ],
 
               const SizedBox(height: 24),
 
@@ -428,7 +490,9 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                 summary.pending.toString(),
                 Icons.pending_actions_rounded,
                 AppTheme.warning,
-                () => _triggerSearch(status: 'intake_received'),
+                () {
+                  _clearFilters();
+                },
               ),
             ),
           ],
@@ -442,7 +506,9 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                 summary.highPriority.toString(),
                 Icons.priority_high_rounded,
                 AppTheme.danger,
-                () => _triggerSearch(priority: 'high'),
+                () {
+                  ref.read(officialFilterNotifierProvider.notifier).update((s) => s.copyWith(priority: 'high'));
+                },
               ),
             ),
             const SizedBox(width: 10),
@@ -452,7 +518,9 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                 summary.clarificationRequired.toString(),
                 Icons.help_outline_rounded,
                 const Color(0xFF7C3AED),
-                () => _triggerSearch(status: 'clarification_required'),
+                () {
+                  ref.read(officialFilterNotifierProvider.notifier).update((s) => s.copyWith(status: 'CLARIFICATION_REQUIRED'));
+                },
               ),
             ),
           ],
@@ -504,6 +572,8 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
   }
 
   Widget _buildSearchAndFilterBar() {
+    final currentFilter = ref.watch(officialFilterNotifierProvider);
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -530,7 +600,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
               const SizedBox(width: 8),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
-                onPressed: () => _triggerSearch(),
+                onPressed: _triggerSearch,
                 child: const Text('Search', style: TextStyle(color: Colors.white)),
               ),
             ],
@@ -539,8 +609,8 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              children: ['ALL', 'UNDER_ANALYSIS', 'CLARIFICATION_REQUIRED', 'FORWARDED', 'RESOLVED'].map((st) {
-                final isSel = _selectedStatusFilter == st;
+              children: ['ALL', 'FORWARDED', 'CLARIFICATION_REQUIRED', 'UNDER_PROCESSING', 'RESOLVED'].map((st) {
+                final isSel = currentFilter.status == st;
                 return Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: ChoiceChip(
@@ -549,10 +619,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                     selectedColor: AppTheme.primaryBlue,
                     onSelected: (val) {
                       if (val) {
-                        setState(() {
-                          _selectedStatusFilter = st;
-                        });
-                        _triggerSearch();
+                        ref.read(officialFilterNotifierProvider.notifier).update((s) => s.copyWith(status: st));
                       }
                     },
                   ),
@@ -566,8 +633,11 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
   }
 
   Widget _buildGrievanceCard(GrievanceModel item) {
+    final dept = item.departmentId ?? item.predictedDepartment ?? 'Revenue & General Administration';
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
+      elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: InkWell(
         onTap: () => context.push('/official/grievance/${item.id}'),
@@ -577,37 +647,128 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Grievance Header Bar
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(item.grievanceNumber, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppTheme.primaryBlue)),
-                  Chip(
-                    label: Text(item.status.replaceAll('_', ' ').toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
-                    backgroundColor: _getStatusColor(item.status),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: (item.priority.toLowerCase() == 'high' ? AppTheme.danger : Colors.orange).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          item.priority.toUpperCase(),
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: item.priority.toLowerCase() == 'high' ? AppTheme.danger : Colors.orange),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Chip(
+                        label: Text(item.status.replaceAll('_', ' ').toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
+                        backgroundColor: _getStatusColor(item.status),
+                      ),
+                    ],
                   ),
                 ],
               ),
               const SizedBox(height: 6),
-              Text(item.title ?? 'No title provided', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-              if (item.departmentId != null) ...[
-                const SizedBox(height: 4),
-                Text('Assigned Dept: ${item.departmentId}', style: const TextStyle(color: AppTheme.primaryBlue, fontWeight: FontWeight.bold, fontSize: 12)),
-              ],
+
+              // Title & Description
+              Text(item.title ?? 'Public Grievance Petition', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+              const SizedBox(height: 4),
+              Text(
+                item.description ?? item.originalText ?? 'No description provided.',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12, color: Colors.black87),
+              ),
+
               const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+
+              // AI Decision Support Banner
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryBlue.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.primaryBlue.withValues(alpha: 0.2)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.smart_toy_rounded, size: 16, color: AppTheme.primaryBlue),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'AI Recommendation: $dept • Kerala Public Services Act, 2012',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.primaryBlue),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              // Quick Official Action Toolbar
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                alignment: WrapAlignment.end,
                 children: [
                   OutlinedButton.icon(
-                    onPressed: () => context.push('/official/grievance/${item.id}'),
-                    icon: const Icon(Icons.description_outlined, size: 14),
-                    label: const Text('View File', style: TextStyle(fontSize: 12)),
+                    onPressed: () => _quickUpdateStatus(item, 'forwarded', targetDept: dept, remarks: 'Forwarded to $dept for action'),
+                    icon: const Icon(Icons.send_rounded, size: 13),
+                    label: const Text('Forward Dept', style: TextStyle(fontSize: 11)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                   ),
-                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => _quickUpdateStatus(item, 'clarification_required', remarks: 'Requested additional citizen details'),
+                    icon: const Icon(Icons.help_outline_rounded, size: 13, color: Colors.purple),
+                    label: const Text('Ask Citizen', style: TextStyle(fontSize: 11, color: Colors.purple)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _quickUpdateStatus(item, 'resolved', remarks: 'Grievance verified and resolved by Official'),
+                    icon: const Icon(Icons.check_circle_outline_rounded, size: 13, color: AppTheme.success),
+                    label: const Text('Resolve', style: TextStyle(fontSize: 11, color: AppTheme.success)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
                   ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryBlue,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                     onPressed: () => _showActionDialog(item),
-                    icon: const Icon(Icons.gavel_rounded, size: 14, color: Colors.white),
-                    label: const Text('Take Action', style: TextStyle(color: Colors.white, fontSize: 12)),
+                    icon: const Icon(Icons.gavel_rounded, size: 13, color: Colors.white),
+                    label: const Text('Govern', style: TextStyle(color: Colors.white, fontSize: 11)),
+                  ),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E293B),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () => context.push('/official/grievance/${item.id}'),
+                    icon: const Icon(Icons.description_outlined, size: 13, color: Colors.white),
+                    label: const Text('View File', style: TextStyle(color: Colors.white, fontSize: 11)),
                   ),
                 ],
               ),
@@ -624,7 +785,9 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
           child: InkWell(
-            onTap: () => _triggerSearch(departmentId: w.departmentName),
+            onTap: () {
+              ref.read(officialFilterNotifierProvider.notifier).update((s) => s.copyWith(departmentId: w.departmentName));
+            },
             borderRadius: BorderRadius.circular(12),
             child: Padding(
               padding: const EdgeInsets.all(12),

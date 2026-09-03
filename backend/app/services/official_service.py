@@ -508,8 +508,10 @@ class OfficialService:
                 continue
             if priority and g.priority.lower() != priority.lower():
                 continue
-            if department_id and g.assigned_department and department_id.lower() not in g.assigned_department.lower():
-                continue
+            if department_id:
+                dept_target = f"{g.assigned_department or ''} {g.predicted_department or ''}".lower()
+                if department_id.lower() not in dept_target:
+                    continue
             if category and g.category and category.lower() not in g.category.lower():
                 continue
             if query and query.strip():
