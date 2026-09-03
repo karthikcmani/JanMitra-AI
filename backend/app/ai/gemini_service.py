@@ -91,37 +91,63 @@ Respond ONLY with a valid JSON object matching this exact schema:
             }
         }
 
-        headers = {"Content-Type": "application/json"}
-        url = f"{self.endpoint}?key={self.api_key}"
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": self.api_key.strip(),
+        }
+
+        models_to_try = [
+            "gemini-3.6-flash",
+            "gemini-3.5-flash",
+            "gemini-2.5-flash",
+        ]
 
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.post(url, json=payload, headers=headers)
-                if resp.status_code != 200:
-                    logger.warning(f"Gemini API returned non-200 status code {resp.status_code}: {resp.text}")
-                    return None
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                for model_name in models_to_try:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+                    resp = await client.post(url, json=payload, headers=headers)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        candidates = data.get("candidates", [])
+                        if not candidates:
+                            continue
 
-                data = resp.json()
-                candidates = data.get("candidates", [])
-                if not candidates:
-                    return None
+                        raw_json_str = (
+                            candidates[0]
+                            .get("content", {})
+                            .get("parts", [{}])[0]
+                            .get("text", "")
+                        )
+                        if not raw_json_str:
+                            continue
 
-                raw_json_str = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                if not raw_json_str:
-                    return None
+                        parsed = json.loads(raw_json_str)
 
-                parsed = json.loads(raw_json_str)
-
-                return GeminiAnalysisResult(
-                    category=parsed.get("category", "General Public Grievance"),
-                    department_name=parsed.get("department_name", "Revenue & General Administration"),
-                    summary=parsed.get("summary", grievance_text[:200]),
-                    key_entities=parsed.get("key_entities", []),
-                    priority=parsed.get("priority", "medium"),
-                    statutory_reference=parsed.get("statutory_reference", "Kerala Public Services Act, 2012"),
-                    reasoning=parsed.get("reasoning", "Assigned based on natural language petition analysis."),
-                    confidence_score=float(parsed.get("confidence_score", 0.85)),
-                )
+                        return GeminiAnalysisResult(
+                            category=parsed.get("category", "General Public Grievance"),
+                            department_name=parsed.get(
+                                "department_name", "Revenue & General Administration"
+                            ),
+                            summary=parsed.get("summary", grievance_text[:200]),
+                            key_entities=parsed.get("key_entities", []),
+                            priority=parsed.get("priority", "medium"),
+                            statutory_reference=parsed.get(
+                                "statutory_reference", "Kerala Public Services Act, 2012"
+                            ),
+                            reasoning=parsed.get(
+                                "reasoning",
+                                "Assigned based on natural language petition analysis.",
+                            ),
+                            confidence_score=float(parsed.get("confidence_score", 0.85)),
+                        )
+                    else:
+                        logger.warning(
+                            f"Gemini API model {model_name} returned non-200 status code {resp.status_code}: {resp.text[:200]}"
+                        )
+                return None
         except Exception as e:
-            logger.warning(f"Gemini LLM analysis encountered non-fatal error: {str(e)}. Falling back safely.")
+            logger.warning(
+                f"Gemini LLM analysis encountered non-fatal error: {str(e)}. Falling back safely."
+            )
             return None
