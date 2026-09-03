@@ -62,6 +62,7 @@ class GrievanceModel {
   final String? assignedDepartment;
   final String? aiExplanation;
   final AIDecisionSupportModel? decisionSupport;
+  final List<GrievanceAttachmentModel> attachments;
   final List<GrievanceAuditLogModel> auditLogs;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -87,6 +88,7 @@ class GrievanceModel {
     this.assignedDepartment,
     this.aiExplanation,
     this.decisionSupport,
+    this.attachments = const [],
     this.auditLogs = const [],
     required this.createdAt,
     required this.updatedAt,
@@ -99,6 +101,14 @@ class GrievanceModel {
         ? rawLogs
             .map((item) =>
                 GrievanceAuditLogModel.fromJson(item as Map<String, dynamic>))
+            .toList()
+        : [];
+
+    var rawAtts = json['attachments'] as List<dynamic>?;
+    List<GrievanceAttachmentModel> parsedAtts = rawAtts != null
+        ? rawAtts
+            .map((item) =>
+                GrievanceAttachmentModel.fromJson(item as Map<String, dynamic>))
             .toList()
         : [];
 
@@ -128,6 +138,7 @@ class GrievanceModel {
       assignedDepartment: json['assigned_department']?.toString(),
       aiExplanation: json['ai_explanation']?.toString(),
       decisionSupport: ds,
+      attachments: parsedAtts,
       auditLogs: parsedLogs,
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()

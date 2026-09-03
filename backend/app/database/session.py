@@ -40,3 +40,17 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
         finally:
             await session.close()
+
+
+async def init_db_schema():
+    from sqlalchemy import text
+    async with engine.begin() as conn:
+        for stmt in [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS department_id VARCHAR(150);",
+            "ALTER TABLE grievances ADD COLUMN IF NOT EXISTS assigned_official_id VARCHAR(36);",
+        ]:
+            try:
+                await conn.execute(text(stmt))
+            except Exception:
+                pass
+

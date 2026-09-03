@@ -93,6 +93,11 @@ class Grievance(Base):
     location_sources: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     category: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
     department_id: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
+    assigned_official_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -105,7 +110,8 @@ class Grievance(Base):
         nullable=False,
     )
 
-    citizen = relationship("User", back_populates="grievances")
+    citizen = relationship("User", foreign_keys=[citizen_id], back_populates="grievances")
+    assigned_official = relationship("User", foreign_keys=[assigned_official_id])
     attachments: Mapped[List["GrievanceAttachment"]] = relationship(
         "GrievanceAttachment",
         back_populates="grievance",

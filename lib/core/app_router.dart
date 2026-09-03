@@ -7,6 +7,7 @@ import '../screens/register/register_screen.dart';
 import '../screens/main_citizen_shell.dart';
 import '../screens/complaints/complaint_form_screen.dart';
 import '../screens/official/official_dashboard_screen.dart';
+import '../screens/official/official_grievance_detail_screen.dart';
 import '../screens/admin/admin_dashboard_screen.dart';
 
 
@@ -59,6 +60,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/admin-dashboard',
         builder: (context, state) => const AdminDashboardScreen(),
+      ),
+      GoRoute(
+        path: '/official/grievance/:id',
+        builder: (context, state) {
+          final id = state.pathParameters['id'] ?? '';
+          return OfficialGrievanceDetailScreen(grievanceId: id);
+        },
       ),
     ],
   );

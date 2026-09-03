@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_db
-from app.dependencies.auth_deps import get_current_official_or_admin
+from app.dependencies.auth_deps import get_current_official_or_admin, get_current_admin
 from app.schemas.user_schema import UserResponse
 from app.services.official_service import (
     DepartmentWorkloadResponse,
@@ -91,7 +91,7 @@ async def get_admin_department_workload(
 )
 async def get_admin_official_users(
     db: AsyncSession = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_official_or_admin),
+    current_user: UserResponse = Depends(get_current_admin),
 ):
     service = OfficialService(db)
     return await service.get_all_official_users()
@@ -107,7 +107,7 @@ async def update_admin_official_user(
     user_id: str,
     payload: dict,
     db: AsyncSession = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_official_or_admin),
+    current_user: UserResponse = Depends(get_current_admin),
 ):
     service = OfficialService(db)
     return await service.update_official_user_status(
@@ -116,6 +116,23 @@ async def update_admin_official_user(
         department_id=payload.get("department_id"),
     )
 
+
+@router.post(
+    "/admin/grievances/{grievance_id}/assign",
+    response_model=OfficialGrievanceDetailResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Admin administrative assignment or reassignment of grievance to department / official",
+)
+async def admin_assign_grievance(
+    grievance_id: str,
+    action_in: OfficialActionRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_admin),
+):
+    service = OfficialService(db)
+    return await service.update_official_action(
+        grievance_id=grievance_id, official_id=current_user.id, action_in=action_in
+    )
 
 
 @router.get(

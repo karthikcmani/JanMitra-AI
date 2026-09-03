@@ -501,14 +501,22 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
               Text('Assigned Dept: ${item.departmentId}', style: const TextStyle(color: AppTheme.primaryBlue, fontWeight: FontWeight.bold, fontSize: 12)),
             ],
             const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
-                onPressed: () => _showActionDialog(item),
-                icon: const Icon(Icons.gavel_rounded, size: 16, color: Colors.white),
-                label: const Text('Take Action / Review', style: TextStyle(color: Colors.white, fontSize: 12)),
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => context.push('/official/grievance/${item.id}'),
+                  icon: const Icon(Icons.description_outlined, size: 14),
+                  label: const Text('View File', style: TextStyle(fontSize: 12)),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
+                  onPressed: () => _showActionDialog(item),
+                  icon: const Icon(Icons.gavel_rounded, size: 14, color: Colors.white),
+                  label: const Text('Take Action', style: TextStyle(color: Colors.white, fontSize: 12)),
+                ),
+              ],
             ),
           ],
         ),
