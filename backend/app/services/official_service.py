@@ -510,7 +510,21 @@ class OfficialService:
                 continue
             if department_id:
                 dept_target = f"{g.assigned_department or ''} {g.predicted_department or ''}".lower()
-                if department_id.lower() not in dept_target:
+                dept_query = department_id.lower()
+                is_kwa = "kwa" in dept_query or "water" in dept_query
+                is_pwd = "pwd" in dept_query or "works" in dept_query or "road" in dept_query
+                is_kseb = "kseb" in dept_query or "electricity" in dept_query or "power" in dept_query
+                is_lsgd = "lsgd" in dept_query or "panchayat" in dept_query or "municipality" in dept_query
+                is_rev = "revenue" in dept_query or "admin" in dept_query
+
+                match = (dept_query in dept_target) or \
+                        (is_kwa and ("kwa" in dept_target or "water" in dept_target)) or \
+                        (is_pwd and ("pwd" in dept_target or "road" in dept_target or "works" in dept_target)) or \
+                        (is_kseb and ("kseb" in dept_target or "power" in dept_target or "electricity" in dept_target)) or \
+                        (is_lsgd and ("lsgd" in dept_target or "panchayat" in dept_target)) or \
+                        (is_rev and ("revenue" in dept_target or "admin" in dept_target))
+
+                if not match:
                     continue
             if category and g.category and category.lower() not in g.category.lower():
                 continue
