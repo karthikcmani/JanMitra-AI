@@ -37,7 +37,9 @@ class OfficialSearchFilterState {
 }
 
 final officialFilterNotifierProvider = StateProvider.autoDispose<OfficialSearchFilterState>((ref) {
-  return const OfficialSearchFilterState();
+  final user = ref.watch(authProvider).currentUser;
+  final dept = (user?.role == 'official' && user?.departmentId != null) ? user!.departmentId : null;
+  return OfficialSearchFilterState(departmentId: dept);
 });
 
 final officialFilteredGrievancesProvider = FutureProvider.autoDispose<List<GrievanceModel>>((ref) async {
@@ -75,7 +77,9 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
 
   void _clearFilters() {
     _searchController.clear();
-    ref.read(officialFilterNotifierProvider.notifier).state = const OfficialSearchFilterState();
+    final user = ref.read(authProvider).currentUser;
+    final dept = (user?.role == 'official' && user?.departmentId != null) ? user!.departmentId : null;
+    ref.read(officialFilterNotifierProvider.notifier).state = OfficialSearchFilterState(departmentId: dept);
   }
 
   void _quickUpdateStatus(GrievanceModel item, String newStatus, {String? targetDept, String? remarks}) async {
@@ -301,6 +305,9 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
 
   @override
   Widget build(BuildContext context) {
+    final currentUser = ref.watch(authProvider).currentUser;
+    final officialDept = currentUser?.departmentId ?? 'Official Department';
+
     final summaryAsync = ref.watch(officialSummaryProvider);
     final grievancesAsync = ref.watch(officialFilteredGrievancesProvider);
     final workloadAsync = ref.watch(departmentWorkloadProvider);
@@ -308,12 +315,12 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
 
     final isFiltered = currentFilter.query.isNotEmpty ||
         currentFilter.status != 'ALL' ||
-        currentFilter.departmentId != null ||
+        (currentFilter.departmentId != null && currentFilter.departmentId != currentUser?.departmentId) ||
         currentFilter.priority != null;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Official Decision Support Workspace'),
+        title: Text(currentUser?.departmentId != null ? '${currentUser!.departmentId} Portal' : 'Official Copilot Workspace'),
         backgroundColor: AppTheme.primaryBlue,
         foregroundColor: Colors.white,
         actions: [
@@ -350,6 +357,40 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Logged In Official Department Banner
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryBlue.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.primaryBlue.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.verified_user_rounded, color: AppTheme.primaryBlue, size: 24),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            currentUser?.fullName ?? 'Government Official',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.primaryBlue),
+                          ),
+                          Text(
+                            'Department: $officialDept',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
               // Interactive Analytics Cards
               summaryAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
@@ -384,7 +425,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                       ),
                       InkWell(
                         onTap: _clearFilters,
-                        child: const Text('Clear All Filters', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.danger)),
+                        child: const Text('Reset Dept Filter', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.danger)),
                       ),
                     ],
                   ),
@@ -410,13 +451,13 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            isFiltered ? 'Filtered Results (${grievances.length})' : 'Official Grievance Queue (${grievances.length})',
+                            '${currentFilter.departmentId ?? officialDept} Queue (${grievances.length})',
                             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue),
                           ),
                           if (isFiltered)
                             TextButton(
                               onPressed: _clearFilters,
-                              child: const Text('Show All'),
+                              child: const Text('Reset'),
                             ),
                         ],
                       ),
@@ -435,7 +476,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
-                                  'No matching grievances found under this filter. Tap "Clear All Filters" to view all grievances.',
+                                  'No pending grievances registered for ${currentFilter.departmentId ?? officialDept}.',
                                   style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
                                 ),
                               ),

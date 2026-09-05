@@ -27,7 +27,8 @@ async def get_official_dashboard_summary(
     current_user: UserResponse = Depends(get_current_official_or_admin),
 ):
     service = OfficialService(db)
-    return await service.get_dashboard_summary()
+    dept = current_user.department_id if current_user.role == "official" else None
+    return await service.get_dashboard_summary(department_id=dept)
 
 
 @router.get(
@@ -46,11 +47,12 @@ async def search_grievances_for_official(
     current_user: UserResponse = Depends(get_current_official_or_admin),
 ):
     service = OfficialService(db)
+    effective_dept = department_id or (current_user.department_id if current_user.role == "official" else None)
     return await service.search_official_grievances(
         query=query,
         status=status,
         priority=priority,
-        department_id=department_id,
+        department_id=effective_dept,
         category=category,
     )
 
@@ -66,7 +68,8 @@ async def get_attention_queue_for_official(
     current_user: UserResponse = Depends(get_current_official_or_admin),
 ):
     service = OfficialService(db)
-    return await service.get_attention_queue()
+    dept = current_user.department_id if current_user.role == "official" else None
+    return await service.get_attention_queue(department_id=dept)
 
 
 @router.get(
