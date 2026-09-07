@@ -44,13 +44,18 @@ final officialFilterNotifierProvider = StateProvider.autoDispose<OfficialSearchF
 
 final officialFilteredGrievancesProvider = FutureProvider.autoDispose<List<GrievanceModel>>((ref) async {
   final filter = ref.watch(officialFilterNotifierProvider);
+  final user = ref.watch(authProvider).currentUser;
   final repo = ref.watch(officialRepositoryProvider);
+
+  final effectiveDept = (user?.role == 'official' && user?.departmentId != null)
+      ? user!.departmentId
+      : filter.departmentId;
 
   return await repo.searchGrievances(
     query: filter.query.isNotEmpty ? filter.query : null,
     status: filter.status == 'ALL' ? null : filter.status.toLowerCase(),
     priority: filter.priority,
-    departmentId: filter.departmentId,
+    departmentId: effectiveDept,
   );
 });
 
@@ -315,12 +320,11 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
 
     final isFiltered = currentFilter.query.isNotEmpty ||
         currentFilter.status != 'ALL' ||
-        (currentFilter.departmentId != null && currentFilter.departmentId != currentUser?.departmentId) ||
         currentFilter.priority != null;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(currentUser?.departmentId != null ? '${currentUser!.departmentId} Portal' : 'Official Copilot Workspace'),
+        title: Text(currentUser?.departmentId != null ? '${currentUser!.departmentId} Portal' : 'Official Workspace'),
         backgroundColor: AppTheme.primaryBlue,
         foregroundColor: Colors.white,
         actions: [
@@ -379,7 +383,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.primaryBlue),
                           ),
                           Text(
-                            'Department: $officialDept',
+                            'Assigned Jurisdiction: $officialDept',
                             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
                           ),
                         ],
@@ -419,13 +423,13 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                     children: [
                       Expanded(
                         child: Text(
-                          'Filter: ${currentFilter.departmentId ?? ""} ${currentFilter.status != "ALL" ? currentFilter.status : ""} ${currentFilter.priority ?? ""}'.trim(),
+                          'Filter: ${currentFilter.status != "ALL" ? currentFilter.status : ""} ${currentFilter.priority ?? ""}'.trim(),
                           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue),
                         ),
                       ),
                       InkWell(
                         onTap: _clearFilters,
-                        child: const Text('Reset Dept Filter', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.danger)),
+                        child: const Text('Reset Status Filter', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.danger)),
                       ),
                     ],
                   ),
@@ -451,8 +455,8 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            '${currentFilter.departmentId ?? officialDept} Queue (${grievances.length})',
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue),
+                            '$officialDept Grievance Queue (${grievances.length})',
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue),
                           ),
                           if (isFiltered)
                             TextButton(
@@ -476,7 +480,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
-                                  'No pending grievances registered for ${currentFilter.departmentId ?? officialDept}.',
+                                  'No grievances registered for $officialDept.',
                                   style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
                                 ),
                               ),
@@ -494,7 +498,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
 
               // Department Workload Overview (Interactive Taps)
               const Text(
-                'Department Workload Distribution (Tap to filter)',
+                'Department Workload Overview',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue),
               ),
               const SizedBox(height: 10),
@@ -517,7 +521,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
           children: [
             Expanded(
               child: _buildStatCard(
-                'Total Grievances',
+                'Total Dept Grievances',
                 summary.totalGrievances.toString(),
                 Icons.folder_open_rounded,
                 AppTheme.primaryBlue,
@@ -628,7 +632,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                 child: TextField(
                   controller: _searchController,
                   decoration: const InputDecoration(
-                    hintText: 'Search by title, number, or citizen name...',
+                    hintText: 'Search title, number, or citizen...',
                     prefixIcon: Icon(Icons.search_rounded),
                     isDense: true,
                     border: OutlineInputBorder(),
@@ -648,7 +652,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              children: ['ALL', 'FORWARDED', 'CLARIFICATION_REQUIRED', 'UNDER_PROCESSING', 'RESOLVED'].map((st) {
+              children: ['ALL', 'INTAKE_RECEIVED', 'FORWARDED', 'CLARIFICATION_REQUIRED', 'UNDER_PROCESSING', 'RESOLVED'].map((st) {
                 final isSel = currentFilter.status == st;
                 return Padding(
                   padding: const EdgeInsets.only(right: 6),
@@ -672,13 +676,8 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
   }
 
   Widget _buildGrievanceCard(GrievanceModel item) {
-    final dept = item.departmentId ?? item.predictedDepartment ?? 'Revenue & General Administration';
+    final dept = item.departmentId ?? item.predictedDepartment ?? 'Official Department';
     final ocrSnippet = item.rawOcrText ?? item.originalText ?? item.description ?? '';
-    final hasMalayalamText = ocrSnippet.contains('വിപിൻ') || ocrSnippet.contains('തൃക്കാക്കര') || ocrSnippet.contains('മാനസിക') || ocrSnippet.contains('ഹരാസ്മെന്റ്');
-
-    final displayTitle = (item.title != null && !item.title!.contains('Gr5rFBDXEAEHk3g'))
-        ? item.title!
-        : 'Petition #${item.grievanceNumber} — Malayalam Document Scan';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -702,12 +701,12 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: (item.priority.toLowerCase() == 'high' ? AppTheme.danger : Colors.orange).withValues(alpha: 0.15),
+                          color: (item.priority.toLowerCase() == 'high' || item.priority.toLowerCase() == 'critical' ? AppTheme.danger : Colors.orange).withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           item.priority.toUpperCase(),
-                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: item.priority.toLowerCase() == 'high' ? AppTheme.danger : Colors.orange),
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: item.priority.toLowerCase() == 'high' || item.priority.toLowerCase() == 'critical' ? AppTheme.danger : Colors.orange),
                         ),
                       ),
                       const SizedBox(width: 6),
@@ -722,7 +721,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
               const SizedBox(height: 6),
 
               // Title & Citizen Info
-              Text(displayTitle, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+              Text(item.title ?? 'Public Grievance Petition', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
               if (item.citizenName != null) ...[
                 const SizedBox(height: 2),
                 Text('Citizen: ${item.citizenName} ${item.citizenPhone != null ? "• Phone: ${item.citizenPhone}" : ""}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
@@ -733,12 +732,12 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: hasMalayalamText ? Colors.amber.withValues(alpha: 0.1) : Colors.grey.shade100,
+                    color: Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: hasMalayalamText ? Colors.amber.shade300 : Colors.grey.shade300),
+                    border: Border.all(color: Colors.grey.shade300),
                   ),
                   child: Text(
-                    'Extracted Text: $ocrSnippet',
+                    'Details: $ocrSnippet',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.black87),
@@ -762,7 +761,7 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        'AI Recommendation: $dept • Kerala Public Services Act, 2012',
+                        'Assigned Jurisdiction: $dept • Kerala Public Services Act, 2012',
                         style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.primaryBlue),
                       ),
                     ),
@@ -779,9 +778,9 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                 alignment: WrapAlignment.end,
                 children: [
                   OutlinedButton.icon(
-                    onPressed: () => _quickUpdateStatus(item, 'forwarded', targetDept: dept, remarks: 'Forwarded to $dept for action'),
-                    icon: const Icon(Icons.send_rounded, size: 13),
-                    label: const Text('Forward Dept', style: TextStyle(fontSize: 11)),
+                    onPressed: () => _quickUpdateStatus(item, 'under_processing', targetDept: dept, remarks: 'Under active processing by $dept'),
+                    icon: const Icon(Icons.engineering_rounded, size: 13),
+                    label: const Text('Process', style: TextStyle(fontSize: 11)),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       minimumSize: Size.zero,
@@ -844,33 +843,27 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
       children: workloads.map((w) {
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
-          child: InkWell(
-            onTap: () {
-              ref.read(officialFilterNotifierProvider.notifier).update((s) => s.copyWith(departmentId: w.departmentName));
-            },
-            borderRadius: BorderRadius.circular(12),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      w.departmentName,
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                    ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    w.departmentName,
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                   ),
-                  Row(
-                    children: [
-                      _buildMiniBadge('Pending: ${w.pending}', AppTheme.warning),
-                      const SizedBox(width: 4),
-                      _buildMiniBadge('Forwarded: ${w.forwarded}', AppTheme.primaryBlue),
-                      const SizedBox(width: 4),
-                      _buildMiniBadge('Total: ${w.total}', AppTheme.textMuted),
-                    ],
-                  ),
-                ],
-              ),
+                ),
+                Row(
+                  children: [
+                    _buildMiniBadge('Pending: ${w.pending}', AppTheme.warning),
+                    const SizedBox(width: 4),
+                    _buildMiniBadge('Forwarded: ${w.forwarded}', AppTheme.primaryBlue),
+                    const SizedBox(width: 4),
+                    _buildMiniBadge('Total: ${w.total}', AppTheme.textMuted),
+                  ],
+                ),
+              ],
             ),
           ),
         );
