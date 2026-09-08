@@ -157,6 +157,7 @@ class GrievanceService:
             )
         except Exception as e:
             # Clean up orphaned physical file if DB insertion fails
+            await self.repo.db.rollback()
             await self.storage.delete_file(storage_path)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -316,7 +317,10 @@ class GrievanceService:
             )
 
         prev_status = grievance.status
-        grievance.original_text = response_text
+        if grievance.original_text:
+            grievance.original_text = f"{grievance.original_text}\n\n[Citizen Clarification Response]: {response_text}"
+        else:
+            grievance.original_text = response_text
         grievance.status = GrievanceStatus.INTAKE_RECEIVED
 
         audit_log = GrievanceAuditLog(
