@@ -102,5 +102,25 @@ class GrievanceRepository {
     );
     return GrievanceModel.fromJson(response.data as Map<String, dynamic>);
   }
+
+  /// Triggers Sprint 11 AI Intelligence Analysis (Summarization, Multi-issue detection, Interview Generation)
+  Future<GrievanceModel> triggerAIIntelligence(String grievanceId) async {
+    final response = await apiService.post(
+      '/grievances/$grievanceId/analyze-intelligence',
+    );
+    return GrievanceModel.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// Submits citizen answers to generated interview questions and triggers re-analysis
+  Future<GrievanceModel> submitInterviewResponses({
+    required String grievanceId,
+    required List<Map<String, String>> responses,
+  }) async {
+    final response = await apiService.post(
+      '/grievances/$grievanceId/interview/responses',
+      data: {'responses': responses},
+    );
+    return GrievanceModel.fromJson(response.data as Map<String, dynamic>);
+  }
 }
 

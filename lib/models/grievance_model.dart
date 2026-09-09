@@ -1,5 +1,4 @@
 class AIDecisionSupportModel {
-
   final String suggestedDepartment;
   final String priority;
   final String reasoning;
@@ -40,8 +39,106 @@ class AIDecisionSupportModel {
   }
 }
 
-class GrievanceModel {
+class GrievanceIssueModel {
+  final String id;
+  final String grievanceId;
+  final int issueNumber;
+  final String title;
+  final String? description;
+  final String category;
+  final String? subcategory;
+  final String severity;
+  final String priority;
+  final String status;
+  final Map<String, dynamic>? extractedFacts;
+  final String interviewStatus;
+  final DateTime createdAt;
+  final DateTime updatedAt;
 
+  const GrievanceIssueModel({
+    required this.id,
+    required this.grievanceId,
+    required this.issueNumber,
+    required this.title,
+    this.description,
+    required this.category,
+    this.subcategory,
+    required this.severity,
+    required this.priority,
+    required this.status,
+    this.extractedFacts,
+    required this.interviewStatus,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory GrievanceIssueModel.fromJson(Map<String, dynamic> json) {
+    return GrievanceIssueModel(
+      id: (json['id'] ?? '').toString(),
+      grievanceId: (json['grievance_id'] ?? '').toString(),
+      issueNumber: (json['issue_number'] as num?)?.toInt() ?? 1,
+      title: (json['title'] ?? 'Reported Issue').toString(),
+      description: json['description']?.toString(),
+      category: (json['category'] ?? 'General').toString(),
+      subcategory: json['subcategory']?.toString(),
+      severity: (json['severity'] ?? 'MEDIUM').toString(),
+      priority: (json['priority'] ?? 'MEDIUM').toString(),
+      status: (json['status'] ?? 'OPEN').toString(),
+      extractedFacts: json['extracted_facts'] is Map<String, dynamic>
+          ? json['extracted_facts'] as Map<String, dynamic>
+          : null,
+      interviewStatus: (json['interview_status'] ?? 'not_required').toString(),
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      updatedAt: json['updated_at'] != null
+          ? DateTime.tryParse(json['updated_at'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+    );
+  }
+}
+
+class GrievanceInterviewQuestionModel {
+  final String id;
+  final String grievanceId;
+  final String? issueId;
+  final String question;
+  final String questionType;
+  final bool required;
+  final int orderIndex;
+  final String status;
+  final DateTime createdAt;
+
+  const GrievanceInterviewQuestionModel({
+    required this.id,
+    required this.grievanceId,
+    this.issueId,
+    required this.question,
+    required this.questionType,
+    required this.required,
+    required this.orderIndex,
+    required this.status,
+    required this.createdAt,
+  });
+
+  factory GrievanceInterviewQuestionModel.fromJson(Map<String, dynamic> json) {
+    return GrievanceInterviewQuestionModel(
+      id: (json['id'] ?? '').toString(),
+      grievanceId: (json['grievance_id'] ?? '').toString(),
+      issueId: json['issue_id']?.toString(),
+      question: (json['question'] ?? '').toString(),
+      questionType: (json['question_type'] ?? 'TEXT').toString(),
+      required: json['required'] as bool? ?? true,
+      orderIndex: (json['order_index'] as num?)?.toInt() ?? 1,
+      status: (json['status'] ?? 'PENDING').toString(),
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+    );
+  }
+}
+
+class GrievanceModel {
   final String id;
   final String grievanceNumber;
   final String citizenId;
@@ -53,6 +150,12 @@ class GrievanceModel {
   final String? translatedText;
   final String status;
   final String priority;
+  final String? severity;
+  final String? summary;
+  final String? aiProcessingStatus;
+  final DateTime? aiProcessedAt;
+  final String? aiModel;
+  final String? aiErrorMessage;
   final String? category;
   final String? departmentId;
   final String? citizenName;
@@ -64,6 +167,8 @@ class GrievanceModel {
   final AIDecisionSupportModel? decisionSupport;
   final List<GrievanceAttachmentModel> attachments;
   final List<GrievanceAuditLogModel> auditLogs;
+  final List<GrievanceIssueModel> issues;
+  final List<GrievanceInterviewQuestionModel> interviewQuestions;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -81,6 +186,12 @@ class GrievanceModel {
     this.translatedText,
     required this.status,
     required this.priority,
+    this.severity,
+    this.summary,
+    this.aiProcessingStatus,
+    this.aiProcessedAt,
+    this.aiModel,
+    this.aiErrorMessage,
     this.category,
     this.departmentId,
     this.rawOcrText,
@@ -90,10 +201,11 @@ class GrievanceModel {
     this.decisionSupport,
     this.attachments = const [],
     this.auditLogs = const [],
+    this.issues = const [],
+    this.interviewQuestions = const [],
     required this.createdAt,
     required this.updatedAt,
   });
-
 
   factory GrievanceModel.fromJson(Map<String, dynamic> json) {
     var rawLogs = json['audit_logs'] as List<dynamic>?;
@@ -109,6 +221,22 @@ class GrievanceModel {
         ? rawAtts
             .map((item) =>
                 GrievanceAttachmentModel.fromJson(item as Map<String, dynamic>))
+            .toList()
+        : [];
+
+    var rawIssues = json['issues'] as List<dynamic>?;
+    List<GrievanceIssueModel> parsedIssues = rawIssues != null
+        ? rawIssues
+            .map((item) =>
+                GrievanceIssueModel.fromJson(item as Map<String, dynamic>))
+            .toList()
+        : [];
+
+    var rawQuestions = json['interview_questions'] as List<dynamic>?;
+    List<GrievanceInterviewQuestionModel> parsedQuestions = rawQuestions != null
+        ? rawQuestions
+            .map((item) =>
+                GrievanceInterviewQuestionModel.fromJson(item as Map<String, dynamic>))
             .toList()
         : [];
 
@@ -131,6 +259,12 @@ class GrievanceModel {
       translatedText: json['translated_text']?.toString(),
       status: (json['status'] ?? 'draft').toString(),
       priority: (json['priority'] ?? 'medium').toString(),
+      severity: json['severity']?.toString(),
+      summary: json['summary']?.toString(),
+      aiProcessingStatus: json['ai_processing_status']?.toString(),
+      aiProcessedAt: json['ai_processed_at'] != null ? DateTime.tryParse(json['ai_processed_at'].toString()) : null,
+      aiModel: json['ai_model']?.toString(),
+      aiErrorMessage: json['ai_error_message']?.toString(),
       category: json['category']?.toString(),
       departmentId: (json['department_id'] ?? json['assigned_department'] ?? json['predicted_department'])?.toString(),
       rawOcrText: json['raw_ocr_text']?.toString(),
@@ -140,6 +274,8 @@ class GrievanceModel {
       decisionSupport: ds,
       attachments: parsedAtts,
       auditLogs: parsedLogs,
+      issues: parsedIssues,
+      interviewQuestions: parsedQuestions,
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
           : DateTime.now(),
@@ -148,6 +284,7 @@ class GrievanceModel {
           : DateTime.now(),
     );
   }
+
   /// Returns a clean, human-readable title for the grievance.
   String getDisplayTitle() {
     if (title != null && title!.isNotEmpty && !title!.startsWith('Handwritten Petition Intake:')) {
@@ -180,15 +317,20 @@ class GrievanceModel {
       return title!;
     }
 
-    return 'Malayalam Petition Intake ($grievanceNumber)';
+    return 'Public Grievance Petition #${grievanceNumber.substring(0, grievanceNumber.length > 8 ? 8 : grievanceNumber.length)}';
   }
 
-  /// Returns a short briefing excerpt for previewing in cards and tracking dropdowns.
+  /// Returns a short briefing / summary snippet for UI list cards.
   String? getShortBriefing() {
+    if (summary != null && summary!.isNotEmpty) {
+      return summary;
+    }
     final text = description ?? originalText ?? rawOcrText;
-    if (text == null || text.trim().isEmpty) return null;
-    final clean = text.trim().replaceAll(RegExp(r'\s+'), ' ');
-    return clean.length > 110 ? '${clean.substring(0, 110)}...' : clean;
+    if (text != null && text.trim().isNotEmpty) {
+      final clean = text.trim();
+      return clean.length > 120 ? '${clean.substring(0, 120)}...' : clean;
+    }
+    return null;
   }
 }
 
@@ -231,7 +373,6 @@ class GrievanceAuditLogModel {
     );
   }
 }
-
 
 class GrievanceAttachmentModel {
   final String id;

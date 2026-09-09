@@ -181,3 +181,46 @@ async def verify_grievance(
         attachment_id=verification_in.attachment_id,
     )
 
+
+from app.schemas.grievance_schema import GrievanceInterviewResponseRequest
+from app.services.ai_intelligence_service import AIIntelligenceService
+
+
+@router.post(
+    "/{grievance_id}/analyze-intelligence",
+    response_model=GrievanceResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Trigger Sprint 11 AI grievance summarization, multi-issue detection & interview generation",
+)
+async def trigger_ai_intelligence(
+    grievance_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user),
+):
+    ai_service = AIIntelligenceService(db)
+    await ai_service.analyze_grievance_intelligence(grievance_id)
+    grievance_service = GrievanceService(db)
+    return await grievance_service.get_grievance_by_id(grievance_id, current_user.id)
+
+
+@router.post(
+    "/{grievance_id}/interview/responses",
+    response_model=GrievanceResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Submit citizen responses to generated interview questions and trigger re-analysis",
+)
+async def submit_interview_responses(
+    grievance_id: str,
+    interview_in: GrievanceInterviewResponseRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user),
+):
+    ai_service = AIIntelligenceService(db)
+    responses_list = [r.model_dump() for r in interview_in.responses]
+    await ai_service.submit_citizen_interview_responses(
+        grievance_id=grievance_id,
+        citizen_id=current_user.id,
+        responses=responses_list,
+    )
+    grievance_service = GrievanceService(db)
+    return await grievance_service.get_grievance_by_id(grievance_id, current_user.id)
