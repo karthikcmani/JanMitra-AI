@@ -122,5 +122,15 @@ class GrievanceRepository {
     );
     return GrievanceModel.fromJson(response.data as Map<String, dynamic>);
   }
+
+  /// Searches official government document knowledge base (Acts, Codes, Regulations)
+  Future<List<Map<String, dynamic>>> searchKnowledgeBase(String query) async {
+    final response = await apiService.get(
+      '/legal/search',
+      queryParameters: {'q': query},
+    );
+    final list = response.data as List<dynamic>;
+    return list.map((j) => Map<String, dynamic>.from(j as Map)).toList();
+  }
 }
 

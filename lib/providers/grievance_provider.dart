@@ -129,9 +129,12 @@ class GrievanceIntakeNotifier extends StateNotifier<GrievanceIntakeState> {
         errorMessage: null,
       );
 
+      final isVoice = state.intakeMode == 'voice_stt';
       final draft = await _repository.createDraft(
-        title: 'Handwritten Petition Intake: ${state.selectedFileName}',
-        intakeMode: 'ocr_handwritten',
+        title: isVoice
+            ? 'Voice Petition Intake: ${state.selectedFileName}'
+            : 'Handwritten Petition Intake: ${state.selectedFileName}',
+        intakeMode: isVoice ? 'voice_stt' : 'ocr_handwritten',
         originalLanguage: 'ml',
       );
 
@@ -140,7 +143,7 @@ class GrievanceIntakeNotifier extends StateNotifier<GrievanceIntakeState> {
         grievanceId: draft.id,
         filePath: state.selectedFilePath!,
         fileName: state.selectedFileName!,
-        attachmentType: 'handwritten_petition',
+        attachmentType: isVoice ? 'voice_recording' : 'handwritten_petition',
       );
 
       // Step 3: Trigger Extraction Engine

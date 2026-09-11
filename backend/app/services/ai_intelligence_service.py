@@ -85,7 +85,7 @@ class AIIntelligenceService:
             grievance.ai_error_message = "Gemini API key not configured."
             ai_run.status = "FAILED"
             ai_run.error_message = "Gemini API key not configured."
-            await self.db.commit()
+            await self.db.flush()
             return None
 
         prompt = f"""
@@ -184,7 +184,7 @@ Respond ONLY with a valid JSON object matching this exact schema:
             grievance.ai_error_message = "Gemini LLM analysis unavailable or quota limit exceeded."
             ai_run.status = "FAILED"
             ai_run.error_message = "Gemini LLM API rate limit or error."
-            await self.db.commit()
+            await self.db.flush()
             return None
 
         # 4. Save analysis results to Grievance and child entities
@@ -252,7 +252,7 @@ Respond ONLY with a valid JSON object matching this exact schema:
             remarks=f"AI Summarization, Multi-issue detection ({len(raw_issues)} issues), and Interview Engine ({total_questions} questions) generated via {used_model}.",
         )
         self.db.add(audit)
-        await self.db.commit()
+        await self.db.flush()
 
         return llm_response_data
 
@@ -316,7 +316,7 @@ Respond ONLY with a valid JSON object matching this exact schema:
                 remarks=f"Citizen submitted {len(saved_responses)} interview answers.",
             )
             self.db.add(audit)
-            await self.db.commit()
+            await self.db.flush()
 
             # Re-trigger AI analysis to incorporate new answers
             try:

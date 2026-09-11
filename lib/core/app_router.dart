@@ -9,7 +9,8 @@ import '../screens/complaints/complaint_form_screen.dart';
 import '../screens/official/official_dashboard_screen.dart';
 import '../screens/official/official_grievance_detail_screen.dart';
 import '../screens/admin/admin_dashboard_screen.dart';
-
+import '../screens/notifications/notifications_screen.dart';
+import '../screens/ai/ai_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -54,6 +55,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const MainCitizenShell(initialIndex: 3),
       ),
       GoRoute(
+        path: '/notifications',
+        builder: (context, state) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: '/ai',
+        builder: (context, state) => const AiScreen(),
+      ),
+      GoRoute(
         path: '/official-dashboard',
         builder: (context, state) => const OfficialDashboardScreen(),
       ),
@@ -71,4 +80,3 @@ final routerProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
-

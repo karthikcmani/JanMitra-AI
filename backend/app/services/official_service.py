@@ -223,7 +223,9 @@ class OfficialService:
             audit_logs = logs_res.scalars().all()
 
             # Build Decision Support Panel
-            dept_suggestion = g.department_id or (analysis.predicted_category if analysis else "Revenue & General Administration")
+            dept_suggestion = g.department_id or (analysis.predicted_category if (analysis and analysis.predicted_category) else "Revenue & General Administration")
+            if not dept_suggestion or not str(dept_suggestion).strip():
+                dept_suggestion = "Revenue & General Administration"
             statutory_info = analysis.legal_grounding_references.get("statutory_act", "Kerala Public Services Act, 2012") if (analysis and analysis.legal_grounding_references) else "Kerala Public Services Act, 2012"
             explanation_text = analysis.ai_explanation if (analysis and analysis.ai_explanation) else "Assigned based on natural language petition context."
             confidence_val = float(analysis.legal_grounding_references.get("confidence_score", 0.85)) if (analysis and analysis.legal_grounding_references) else 0.85
@@ -413,7 +415,7 @@ class OfficialService:
             remarks=f"Document OCR processed. Automatically matched department: {dept_name}.",
         )
         self.db.add(audit_log)
-        await self.db.commit()
+        await self.db.flush()
 
         return (await self.get_all_official_grievances())[0]
 

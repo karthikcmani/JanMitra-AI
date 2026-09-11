@@ -749,6 +749,12 @@ class FastAutoExtractionAdapter(BaseExtractionAdapter):
     ) -> NormalizedExtractionResult:
         now = datetime.now(timezone.utc)
 
+        # Voice recording check
+        if attachment.attachment_type == AttachmentType.VOICE_RECORDING or (file_path and file_path.suffix.lower() in [".wav", ".mp3", ".m4a", ".ogg", ".flac"]):
+            from app.services.voice_service import VoiceTranscriptionAdapter
+            va = VoiceTranscriptionAdapter()
+            return await va.extract_content(attachment, file_path)
+
         # 1. Try Google Cloud Vision OCR if service account credentials present
         if os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON"):
             cv = CloudVisionMalayalamOCR()

@@ -30,11 +30,13 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
     super.dispose();
   }
 
-  Future<void> _pickDocument() async {
+  Future<void> _pickDocument({bool isAudio = false}) async {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+        allowedExtensions: isAudio
+            ? ['wav', 'mp3', 'm4a', 'flac', 'ogg']
+            : ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
       );
 
       if (result != null && result.files.single.path != null) {
@@ -245,7 +247,7 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
 
                   // MODE 3: VOICE INPUT FLOW
                   if (state.intakeMode == 'voice_stt') ...[
-                    _buildVoicePlaceholderSection(isDark),
+                    _buildVoiceIntakeSection(state, isDark),
                   ],
                 ],
               ),
@@ -566,34 +568,209 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
     );
   }
 
-  Widget _buildVoicePlaceholderSection(bool isDark) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkCard : Colors.amber.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.amber.shade300),
-      ),
-      child: Column(
-        children: [
-          Icon(Icons.mic_none_rounded, size: 48, color: Colors.amber.shade800),
-          const SizedBox(height: 12),
-          Text(
-            'Malayalam Voice Input Arriving Soon',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.amber.shade900,
+  Widget _buildVoiceIntakeSection(GrievanceIntakeState state, bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Audio File Selection Box
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isDark ? AppTheme.darkCard : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Column(
+            children: [
+              const Icon(Icons.mic_rounded, size: 40, color: AppTheme.secondaryTeal),
+              const SizedBox(height: 8),
+              const Text(
+                'Upload Malayalam Voice Recording',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Supported audio formats: WAV, MP3, M4A, FLAC, OGG',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () => _pickDocument(isAudio: true),
+                icon: const Icon(Icons.graphic_eq_rounded),
+                label: Text(
+                  state.selectedFileName ?? 'Browse / Select Audio File',
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        if (state.selectedFileName != null) ...[
+          // Audio File Metadata Card
+          Card(
+            elevation: 1,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            child: ListTile(
+              leading: const Icon(Icons.audio_file_rounded, color: AppTheme.secondaryTeal, size: 32),
+              title: Text(
+                state.selectedFileName!,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              subtitle: Text(
+                'Voice Audio Artifact • (${((state.selectedFileSizeBytes ?? 0) / 1024).toStringAsFixed(1)} KB)',
+                style: const TextStyle(fontSize: 11),
+              ),
             ),
           ),
-          const SizedBox(height: 8),
-          const Text(
-            'Malayalam Voice Intake (Speech-to-Text) will be integrated in the upcoming development phase. Please use Handwritten Petition OCR or Direct Text Input to file your grievance today.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, height: 1.4),
+          const SizedBox(height: 16),
+
+          // Upload & Transcribe Trigger Button
+          if (state.extractionStep == IntakeExtractionStep.idle) ...[
+            CustomButton(
+              text: 'Upload & Transcribe Malayalam Audio via Speech-to-Text',
+              onPressed: _triggerExtraction,
+              isLoading: state.isLoading,
+            ),
+          ],
+        ],
+
+        // STT Processing Indicator
+        if (state.extractionStep == IntakeExtractionStep.uploading ||
+            state.extractionStep == IntakeExtractionStep.extracting) ...[
+          const SizedBox(height: 16),
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Row(
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(width: 16),
+                  Expanded(
+                    child: Text(
+                      'Processing Malayalam Speech-to-Text transcription via Multimodal Gemini STT / Whisper Engine...',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
-      ),
+
+        // Transcription Completed Display & Verification Area
+        if (state.extractionStep == IntakeExtractionStep.completed) ...[
+          const SizedBox(height: 16),
+          if (state.rawExtractedText != null && state.rawExtractedText!.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.teal.shade50.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.teal.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.record_voice_over_rounded, size: 18, color: AppTheme.secondaryTeal),
+                          SizedBox(width: 6),
+                          Text(
+                            'AI Speech-to-Text Transcribed Petition',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppTheme.secondaryTeal,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'Engine: ${state.extractionResult?.engineName ?? "multimodal_stt_v1"}',
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    state.rawExtractedText ?? '',
+                    style: const TextStyle(fontSize: 14, height: 1.4, color: Colors.black87),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.amber.shade300),
+              ),
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.info_outline_rounded, color: Colors.deepOrange, size: 20),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Audio Transcription Needs Verification',
+                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 6),
+                  Text(
+                    'Automatic STT could not fully transcribe the audio stream. Please type or verify your petition details in the box below.',
+                    style: TextStyle(fontSize: 12, height: 1.4),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 20),
+
+          // Citizen Verification Field
+          const Text(
+            'Citizen Petition Text Entry / Verification (Required)',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Please review or edit your transcribed voice petition text before submitting.',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: _verifiedTextController,
+            maxLines: 6,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              hintText: 'Transcribed text will appear here. Edit if needed...',
+            ),
+            style: const TextStyle(fontSize: 15),
+          ),
+          const SizedBox(height: 20),
+
+          CustomButton(
+            text: 'Confirm Petition Text & Register Grievance',
+            onPressed: _confirmAndSubmitHandwritten,
+            isLoading: state.isLoading,
+            backgroundColor: AppTheme.success,
+          ),
+        ],
+      ],
     );
   }
 }

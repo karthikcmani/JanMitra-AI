@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../models/grievance_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/grievance_provider.dart';
+import '../../repositories/notification_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/constants.dart';
 import '../../widgets/stat_card.dart';
@@ -133,6 +134,42 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(Icons.notifications_outlined),
+                ref.watch(userNotificationsProvider).when(
+                      data: (notifs) {
+                        final unreadCount = notifs.where((n) => !n.isRead).length;
+                        if (unreadCount == 0) return const SizedBox.shrink();
+                        return Positioned(
+                          right: -2,
+                          top: -2,
+                          child: Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: const BoxDecoration(
+                              color: AppTheme.danger,
+                              shape: BoxShape.circle,
+                            ),
+                            constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+                            child: Text(
+                              unreadCount > 9 ? '9+' : '$unreadCount',
+                              style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        );
+                      },
+                      loading: () => const SizedBox.shrink(),
+                      error: (err, stack) => const SizedBox.shrink(),
+                    ),
+              ],
+            ),
+            tooltip: 'Notifications',
+            onPressed: () => context.push('/notifications'),
+          ),
+
           if (user?.role == 'admin')
             IconButton(
               icon: const Icon(Icons.shield_outlined, color: Colors.amber),
