@@ -53,6 +53,8 @@ class Settings(BaseSettings):
                 self.DATABASE_URL = self.DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
             elif self.DATABASE_URL.startswith("postgresql://") and not self.DATABASE_URL.startswith("postgresql+"):
                 self.DATABASE_URL = self.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+            if "sslmode=" in self.DATABASE_URL:
+                self.DATABASE_URL = self.DATABASE_URL.replace("sslmode=", "ssl=")
         else:
             self.DATABASE_URL = f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
@@ -61,9 +63,13 @@ class Settings(BaseSettings):
                 self.SYNC_DATABASE_URL = self.SYNC_DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
             elif self.SYNC_DATABASE_URL.startswith("postgresql://") and not self.SYNC_DATABASE_URL.startswith("postgresql+"):
                 self.SYNC_DATABASE_URL = self.SYNC_DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
+            if "ssl=" in self.SYNC_DATABASE_URL and "sslmode=" not in self.SYNC_DATABASE_URL:
+                self.SYNC_DATABASE_URL = self.SYNC_DATABASE_URL.replace("ssl=", "sslmode=")
         else:
             if self.DATABASE_URL and "asyncpg" in self.DATABASE_URL:
                 self.SYNC_DATABASE_URL = self.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql+psycopg2://", 1)
+                if "ssl=" in self.SYNC_DATABASE_URL and "sslmode=" not in self.SYNC_DATABASE_URL:
+                    self.SYNC_DATABASE_URL = self.SYNC_DATABASE_URL.replace("ssl=", "sslmode=")
             else:
                 self.SYNC_DATABASE_URL = f"postgresql+psycopg2://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 

@@ -3,24 +3,18 @@ import 'package:dio/dio.dart';
 import 'secure_storage_service.dart';
 
 class ApiService {
-  /// Default local development fallback URL
-  static const String fallbackDevUrl = 'http://10.0.2.2:8000/api/v1';
+  /// Production Render FastAPI Base URL
+  static const String renderBaseUrl = 'https://janmitra-backend-twij.onrender.com/api/v1';
 
   /// Resolves the API Base URL in order of precedence:
   /// 1. `--dart-define=API_BASE_URL=...` supplied at runtime/build-time
-  /// 2. `fallbackDevUrl` (`http://10.0.2.2:8000/api/v1`)
+  /// 2. Production Render URL (`https://janmitra-backend-twij.onrender.com/api/v1`)
   static String get defaultBaseUrl {
     const envUrl = String.fromEnvironment('API_BASE_URL');
     if (envUrl.isNotEmpty) {
       return envUrl;
     }
-    if (kIsWeb ||
-        defaultTargetPlatform == TargetPlatform.windows ||
-        defaultTargetPlatform == TargetPlatform.macOS ||
-        defaultTargetPlatform == TargetPlatform.linux) {
-      return 'http://localhost:8000/api/v1';
-    }
-    return 'http://10.0.2.2:8000/api/v1';
+    return renderBaseUrl;
   }
 
 

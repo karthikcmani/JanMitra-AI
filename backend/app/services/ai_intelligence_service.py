@@ -180,12 +180,61 @@ Respond ONLY with a valid JSON object matching this exact schema:
             logger.warning(f"AI Intelligence LLM call exception: {str(e)}")
 
         if not llm_response_data:
-            grievance.ai_processing_status = "failed"
-            grievance.ai_error_message = "Gemini LLM analysis unavailable or quota limit exceeded."
-            ai_run.status = "FAILED"
-            ai_run.error_message = "Gemini LLM API rate limit or error."
-            await self.db.flush()
-            return None
+            # Rule-based Heuristic Fallback Analysis (Fast & Zero API Key cost)
+            logger.info("Using Rule-based Heuristic Analyzer fallback for Grievance Intelligence.")
+            used_model = "heuristic_rule_analyzer_v1"
+            clean_text = combined_text.strip()
+            summary_text = clean_text[:200] + ("..." if len(clean_text) > 200 else "")
+
+            # Heuristic category & issue mapping
+            cat = "General Administration"
+            if any(k in clean_text.lower() for k in ["water", "pipe", "leak", "kwa"]):
+                cat = "Water Supply & Drainage"
+            elif any(k in clean_text.lower() for k in ["road", "pothole", "bridge", "culvert", "pwd"]):
+                cat = "Roads & Public Infrastructure"
+            elif any(k in clean_text.lower() for k in ["electric", "power", "pole", "transformer", "kseb"]):
+                cat = "Power & Electricity"
+            elif any(k in clean_text.lower() for k in ["garbage", "waste", "sanitation", "drain"]):
+                cat = "Local Body & Sanitation"
+
+            questions_list = []
+            if "ward" not in clean_text.lower() and "house" not in clean_text.lower():
+                questions_list.append({
+                    "question": "Please specify your house number or exact landmark in the ward.",
+                    "question_type": "LOCATION",
+                    "required": True
+                })
+            else:
+                questions_list.append({
+                    "question": "Please specify how long this issue has been persisting and any exact shop/building landmark nearby.",
+                    "question_type": "CLARIFICATION",
+                    "required": False
+                })
+
+            llm_response_data = {
+                "summary": f"Reported grievance regarding {cat.lower()}: {summary_text}",
+                "language": grievance.original_language or "ml",
+                "overall_severity": "HIGH" if "urgent" in clean_text.lower() or "severe" in clean_text.lower() else "MEDIUM",
+                "overall_priority": "high" if "urgent" in clean_text.lower() or "severe" in clean_text.lower() else "medium",
+                "issues": [
+                    {
+                        "issue_number": 1,
+                        "title": f"Reported {cat} Issue",
+                        "description": summary_text,
+                        "category": cat,
+                        "subcategory": "General",
+                        "severity": "MEDIUM",
+                        "priority": "MEDIUM",
+                        "extracted_facts": {
+                            "location": (grievance.confirmed_location or {}).get("ward", "Reported Ward"),
+                            "affected_service": cat,
+                        },
+                        "missing_facts": ["exact_house_number_or_landmark"] if questions_list else [],
+                        "interview_required": len(questions_list) > 0,
+                        "interview_questions": questions_list,
+                    }
+                ]
+            }
 
         # 4. Save analysis results to Grievance and child entities
         now = datetime.now(timezone.utc)
