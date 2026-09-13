@@ -410,7 +410,7 @@ class OfficialService:
             action_type="DOCUMENT_PROCESSED_AND_ROUTED",
             previous_state=prev_status,
             new_state=grievance.status,
-            remarks=f"Document OCR processed. Automatically matched department: {routing_info.department_name}.",
+            remarks=f"Document OCR processed. Automatically matched department: {dept_name}.",
         )
         self.db.add(audit_log)
         await self.db.commit()
