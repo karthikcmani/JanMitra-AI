@@ -81,9 +81,8 @@ class AuthRepository {
       } else if (e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.receiveTimeout ||
           e.type == DioExceptionType.connectionError) {
-        errorMessage =
+        errorMessage = e.message ??
             'Network connection failed. Ensure FastAPI backend server is running (${apiService.dio.options.baseUrl}).';
-
       }
 
       return AuthResult(
@@ -155,7 +154,7 @@ class AuthRepository {
       } else if (e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.receiveTimeout ||
           e.type == DioExceptionType.connectionError) {
-        errorMessage =
+        errorMessage = e.message ??
             'Network connection failed. Cannot reach FastAPI backend (${apiService.dio.options.baseUrl}).';
       }
 

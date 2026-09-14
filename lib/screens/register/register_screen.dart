@@ -10,6 +10,8 @@ import '../../utils/validators.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../widgets/gov_logo.dart';
+import '../../widgets/server_config_dialog.dart';
+import '../../providers/theme_provider.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -108,6 +110,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => context.pop(),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.dns_rounded, color: AppTheme.primaryBlue),
+            tooltip: 'Server Connection Host Settings',
+            onPressed: () {
+              ServerConfigDialog.show(context, ref.read(apiServiceProvider));
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: SafeArea(
         child: Center(

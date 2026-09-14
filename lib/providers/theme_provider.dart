@@ -15,7 +15,11 @@ final secureStorageServiceProvider = Provider<SecureStorageService>((ref) {
 
 final apiServiceProvider = Provider<ApiService>((ref) {
   final secureStorage = ref.watch(secureStorageServiceProvider);
-  return ApiService(secureStorage: secureStorage);
+  final preferencesService = ref.watch(preferencesServiceProvider);
+  return ApiService(
+    secureStorage: secureStorage,
+    preferencesService: preferencesService,
+  );
 });
 
 final themeProvider = StateNotifierProvider<ThemeNotifier, bool>((ref) {

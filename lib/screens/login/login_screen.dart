@@ -10,6 +10,9 @@ import '../../widgets/custom_button.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../widgets/gov_logo.dart';
 
+import '../../widgets/server_config_dialog.dart';
+import '../../providers/theme_provider.dart';
+
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
@@ -120,6 +123,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.dns_rounded, color: AppTheme.primaryBlue),
+            tooltip: 'Server Connection Host Settings',
+            onPressed: () {
+              ServerConfigDialog.show(context, ref.read(apiServiceProvider));
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
