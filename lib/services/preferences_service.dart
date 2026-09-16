@@ -24,4 +24,16 @@ class PreferencesService {
   Future<void> setLanguage(String lang) async {
     await _prefs.setString(keyLanguage, lang);
   }
+
+  static const String keyApiBaseUrl = 'apiBaseUrl';
+
+  String? get customApiBaseUrl => _prefs.getString(keyApiBaseUrl);
+
+  Future<void> setCustomApiBaseUrl(String url) async {
+    await _prefs.setString(keyApiBaseUrl, url);
+  }
+
+  Future<void> clearCustomApiBaseUrl() async {
+    await _prefs.remove(keyApiBaseUrl);
+  }
 }
