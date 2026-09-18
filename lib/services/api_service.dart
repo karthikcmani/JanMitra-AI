@@ -8,7 +8,7 @@ class ApiService {
   static const String renderBaseUrl = 'https://janmitra-backend-twij.onrender.com/api/v1';
 
   /// Local Wi-Fi Base URL for physical device testing
-  static const String localWifiUrl = 'http://10.197.87.105:8000/api/v1';
+  static const String localWifiUrl = 'http://10.49.50.105:8000/api/v1';
 
   /// Android Emulator Base URL
   static const String emulatorUrl = 'http://10.0.2.2:8000/api/v1';
@@ -78,7 +78,7 @@ class ApiService {
               error.type == DioExceptionType.connectionError) {
             customMsg =
                 'Unable to reach JanMitra server at ${_dio.options.baseUrl}.\n'
-                'Tap the ⚙️ icon at top right to switch to Local Server (10.197.87.105:8000) or check network.';
+                'Tap the server icon at top right to switch to Local Server (10.49.50.105:8000) or check network.';
           }
 
           final updatedError = error.copyWith(
@@ -112,7 +112,17 @@ class ApiService {
   }
 
   Future<bool> testConnection([String? testUrl]) async {
-    final targetUrl = testUrl ?? _dio.options.baseUrl;
+    String targetUrl = (testUrl ?? _dio.options.baseUrl).trim();
+    if (!targetUrl.contains('/api/v1')) {
+      if (targetUrl.endsWith('/')) {
+        targetUrl = '${targetUrl}api/v1';
+      } else {
+        targetUrl = '$targetUrl/api/v1';
+      }
+    }
+    if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+      targetUrl = 'http://$targetUrl';
+    }
     try {
       final testDio = Dio(
         BaseOptions(

@@ -127,7 +127,7 @@ class _ServerConfigDialogState extends State<ServerConfigDialog> {
               dense: true,
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.wifi_rounded, color: AppTheme.success),
-              title: const Text('Local Wi-Fi Computer (10.197.87.105)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              title: const Text('Local Wi-Fi Computer (10.49.50.105)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
               subtitle: const Text(ApiService.localWifiUrl, style: TextStyle(fontSize: 11)),
               onTap: () => _applyUrl(ApiService.localWifiUrl),
             ),
