@@ -295,6 +295,8 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
             Text(
               title,
               textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
@@ -305,6 +307,8 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
             Text(
               subtitle,
               textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 10, color: Colors.grey),
             ),
           ],
@@ -426,10 +430,14 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 6,
                     children: [
                       const Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(Icons.smart_toy_rounded, size: 18, color: AppTheme.primaryBlue),
                           SizedBox(width: 6),

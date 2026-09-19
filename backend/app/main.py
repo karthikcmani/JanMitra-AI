@@ -58,6 +58,11 @@ async def on_startup():
     tags=["Health Check"],
     summary="Health check endpoint",
 )
+@app.get(
+    "/health",
+    tags=["Health Check"],
+    summary="Root health check endpoint",
+)
 async def health_check():
     return {
         "status": "online",

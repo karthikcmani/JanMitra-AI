@@ -159,8 +159,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       label: 'Full Name',
                       hint: 'Rajesh Kumar',
                       prefixIcon: Icons.person_outline_rounded,
-                      validator: (value) =>
-                          Validators.validateRequired(value, 'Full Name'),
+                      validator: Validators.validateFullName,
                     ),
                     const SizedBox(height: 16),
                     // Email Field

@@ -8,7 +8,7 @@ class ApiService {
   static const String renderBaseUrl = 'https://janmitra-backend-twij.onrender.com/api/v1';
 
   /// Local Wi-Fi Base URL for physical device testing
-  static const String localWifiUrl = 'http://10.49.50.105:8000/api/v1';
+  static const String localWifiUrl = 'http://10.197.87.105:8000/api/v1';
 
   /// Android Emulator Base URL
   static const String emulatorUrl = 'http://10.0.2.2:8000/api/v1';
@@ -39,8 +39,9 @@ class ApiService {
   }) : _dio = Dio(
           BaseOptions(
             baseUrl: baseUrl ?? preferencesService?.customApiBaseUrl ?? defaultBaseUrl,
-            connectTimeout: const Duration(seconds: 10),
-            receiveTimeout: const Duration(seconds: 30),
+            connectTimeout: const Duration(seconds: 45),
+            receiveTimeout: const Duration(seconds: 60),
+            sendTimeout: const Duration(seconds: 60),
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
@@ -72,13 +73,15 @@ class ApiService {
           debugPrint('<-- Error Message: ${error.message}');
 
           String customMsg = error.message ?? 'Unknown connection error';
-          if (error.type == DioExceptionType.connectionTimeout ||
-              error.type == DioExceptionType.receiveTimeout ||
-              error.type == DioExceptionType.sendTimeout ||
-              error.type == DioExceptionType.connectionError) {
+          if (error.type == DioExceptionType.connectionTimeout) {
             customMsg =
-                'Unable to reach JanMitra server at ${_dio.options.baseUrl}.\n'
-                'Tap the server icon at top right to switch to Local Server (10.49.50.105:8000) or check network.';
+                'Connection timed out reaching JanMitra server. The cloud service may be waking up, please retry in a moment.';
+          } else if (error.type == DioExceptionType.receiveTimeout) {
+            customMsg =
+                'The JanMitra server is processing your request. Please check tracking or retry.';
+          } else if (error.type == DioExceptionType.connectionError) {
+            customMsg =
+                'Unable to reach JanMitra server (${_dio.options.baseUrl}). Please verify your internet connection.';
           }
 
           final updatedError = error.copyWith(

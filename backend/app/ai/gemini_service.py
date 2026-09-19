@@ -103,7 +103,7 @@ Respond ONLY with a valid JSON object matching this exact schema:
         ]
 
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
+            async with httpx.AsyncClient(timeout=4.0) as client:
                 for model_name in models_to_try:
                     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
                     resp = await client.post(url, json=payload, headers=headers)
@@ -141,6 +141,11 @@ Respond ONLY with a valid JSON object matching this exact schema:
                             ),
                             confidence_score=float(parsed.get("confidence_score", 0.85)),
                         )
+                    elif resp.status_code == 429:
+                        logger.warning(
+                            f"Gemini API model {model_name} quota exhausted (429). Fast-failing to heuristic fallback."
+                        )
+                        break
                     else:
                         logger.warning(
                             f"Gemini API model {model_name} returned non-200 status code {resp.status_code}: {resp.text[:200]}"

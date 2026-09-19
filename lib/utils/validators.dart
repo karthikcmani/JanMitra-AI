@@ -6,6 +6,16 @@ class Validators {
     return null;
   }
 
+  static String? validateFullName(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Full name is required';
+    }
+    if (value.trim().length < 2) {
+      return 'Full name must be at least 2 characters';
+    }
+    return null;
+  }
+
   static String? validateEmail(String? value) {
     if (value == null || value.trim().isEmpty) {
       return 'Email address is required';

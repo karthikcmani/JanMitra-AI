@@ -161,7 +161,7 @@ Respond ONLY with a valid JSON object matching this exact schema:
         used_model = None
 
         try:
-            async with httpx.AsyncClient(timeout=20.0) as client:
+            async with httpx.AsyncClient(timeout=4.0) as client:
                 for model_name in models_to_try:
                     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
                     resp = await client.post(url, json=payload, headers=headers)
@@ -174,6 +174,11 @@ Respond ONLY with a valid JSON object matching this exact schema:
                                 llm_response_data = json.loads(raw_text)
                                 used_model = model_name
                                 break
+                    elif resp.status_code == 429:
+                        logger.warning(
+                            f"Model {model_name} HTTP 429 quota exhausted. Fast-failing to heuristic analyzer."
+                        )
+                        break
                     else:
                         logger.warning(f"Model {model_name} HTTP {resp.status_code}: {resp.text[:150]}")
         except Exception as e:

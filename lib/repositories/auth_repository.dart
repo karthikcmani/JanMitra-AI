@@ -71,7 +71,17 @@ class AuthRepository {
       if (e.response != null && e.response?.data != null) {
         final data = e.response?.data;
         if (data is Map<String, dynamic> && data.containsKey('detail')) {
-          errorMessage = data['detail'].toString();
+          final detail = data['detail'];
+          if (detail is List && detail.isNotEmpty) {
+            final firstErr = detail.first;
+            if (firstErr is Map && firstErr.containsKey('msg')) {
+              errorMessage = firstErr['msg'].toString();
+            } else {
+              errorMessage = detail.toString();
+            }
+          } else {
+            errorMessage = detail.toString();
+          }
           if (errorMessage.toLowerCase().contains('already exists')) {
             status = AuthResultStatus.duplicateEmail;
           }

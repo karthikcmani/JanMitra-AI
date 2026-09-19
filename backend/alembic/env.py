@@ -64,13 +64,19 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
 
-    with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+    try:
+        with connectable.connect() as connection:
+            context.configure(
+                connection=connection, target_metadata=target_metadata
+            )
 
-        with context.begin_transaction():
-            context.run_migrations()
+            with context.begin_transaction():
+                context.run_migrations()
+    except Exception as e:
+        import logging
+        logging.getLogger("alembic.env").warning(
+            f"Alembic migration skipped or failed to connect to database: {e}"
+        )
 
 
 if context.is_offline_mode():
