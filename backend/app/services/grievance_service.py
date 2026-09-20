@@ -394,7 +394,7 @@ class GrievanceService:
         self.repo.db.add(audit_log)
         await self.repo.db.commit()
 
-        # Trigger AI analysis, Sprint 11 intelligence & routing pipeline
+        # Trigger AI analysis, Sprint 11 intelligence, legal, jurisdiction & routing pipeline
         try:
             from app.services.official_service import OfficialService
             official_service = OfficialService(self.repo.db)
@@ -403,7 +403,25 @@ class GrievanceService:
             from app.services.ai_intelligence_service import AIIntelligenceService
             ai_intel = AIIntelligenceService(self.repo.db)
             await ai_intel.analyze_grievance_intelligence(grievance.id)
-        except Exception:
+
+            from app.services.legal_service import LegalIntelligenceService
+            legal_intel = LegalIntelligenceService(self.repo.db)
+            await legal_intel.analyze_legal_grounding(grievance.id)
+
+            from app.services.jurisdiction_service import JurisdictionIntelligenceService
+            juris_service = JurisdictionIntelligenceService(self.repo.db)
+            await juris_service.recommend_jurisdiction(grievance.id)
+
+            from app.services.notification_service import NotificationService
+            notif_service = NotificationService(self.repo.db)
+            await notif_service.create_notification(
+                user_id=citizen_id,
+                title="Grievance Submitted & Verified",
+                message=f"Your grievance petition '{grievance.title or 'JM-' + grievance.grievance_number}' has been received and processed by JanMitra AI.",
+                grievance_id=grievance.id,
+                notification_type="STATUS_CHANGE",
+            )
+        except Exception as e:
             pass
 
         self.repo.db.expire_all()

@@ -1,7 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.routers import auth_router, grievance_router, official_router
+from app.routers import (
+    auth_router,
+    duplicate_router,
+    grievance_router,
+    jurisdiction_router,
+    legal_router,
+    notification_router,
+    official_router,
+)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -28,6 +36,10 @@ app.add_middleware(
 app.include_router(auth_router, prefix=settings.API_V1_STR)
 app.include_router(grievance_router, prefix=settings.API_V1_STR)
 app.include_router(official_router, prefix=settings.API_V1_STR)
+app.include_router(legal_router, prefix=settings.API_V1_STR)
+app.include_router(jurisdiction_router, prefix=settings.API_V1_STR)
+app.include_router(duplicate_router, prefix=settings.API_V1_STR)
+app.include_router(notification_router, prefix=settings.API_V1_STR)
 
 
 @app.on_event("startup")
