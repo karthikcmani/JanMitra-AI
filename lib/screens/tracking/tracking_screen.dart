@@ -18,7 +18,9 @@ class TrackingScreen extends ConsumerStatefulWidget {
 class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   String? _selectedId;
   final TextEditingController _clarificationController = TextEditingController();
+  final Map<String, TextEditingController> _interviewControllers = {};
   bool _isSubmittingClarification = false;
+  bool _isSubmittingInterview = false;
 
   @override
   void initState() {
@@ -29,6 +31,9 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   @override
   void dispose() {
     _clarificationController.dispose();
+    for (final controller in _interviewControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -129,6 +134,16 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
 
                 _buildSummaryCard(currentGrievance),
                 const SizedBox(height: 24),
+
+                if (currentGrievance.summary != null || currentGrievance.issues.isNotEmpty) ...[
+                  _buildAIIntelligenceCard(currentGrievance),
+                  const SizedBox(height: 24),
+                ],
+
+                if (currentGrievance.interviewQuestions.isNotEmpty) ...[
+                  _buildInterviewEngineCard(currentGrievance),
+                  const SizedBox(height: 24),
+                ],
 
                 if (currentGrievance.status.toLowerCase() == 'clarification_required') ...[
                   _buildClarificationRequiredCard(currentGrievance),
@@ -297,6 +312,395 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildAIIntelligenceCard(GrievanceModel grievance) {
+    final summary = grievance.summary;
+    final issues = grievance.issues;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardTheme.color,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppTheme.primaryBlue.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.auto_awesome_rounded, color: AppTheme.primaryBlue, size: 22),
+                  SizedBox(width: 8),
+                  Text(
+                    'AI Grievance Intelligence',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.primaryBlue,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryBlue.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  'STATUS: ${(grievance.aiProcessingStatus ?? "COMPLETED").toUpperCase()}',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.primaryBlue,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _buildMetricBadge('Severity', grievance.severity?.toUpperCase() ?? 'MEDIUM', AppTheme.warning),
+              const SizedBox(width: 8),
+              _buildMetricBadge('Priority', grievance.priority.toUpperCase(), AppTheme.primaryBlue),
+            ],
+          ),
+          if (summary != null && summary.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            const Text(
+              'Fact-Bounded AI Summary:',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : AppTheme.lightBg,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.borderLight),
+              ),
+              child: Text(
+                summary,
+                style: const TextStyle(fontSize: 13, height: 1.4),
+              ),
+            ),
+          ],
+          if (issues.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(
+              'Multi-Issue Decomposition (${issues.length} Issues Detected):',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            ...issues.map((issue) => _buildIssueCard(issue)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricBadge(String label, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$label: ',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color),
+          ),
+          Text(
+            value,
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: color),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIssueCard(GrievanceIssueModel issue) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).brightness == Brightness.dark
+            ? Colors.white.withValues(alpha: 0.03)
+            : Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.borderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  'Issue #${issue.issueNumber}: ${issue.title}',
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppTheme.secondaryTeal.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  issue.category,
+                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppTheme.secondaryTeal),
+                ),
+              ),
+            ],
+          ),
+          if (issue.subcategory != null && issue.subcategory!.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              'Subcategory: ${issue.subcategory}',
+              style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontStyle: FontStyle.italic),
+            ),
+          ],
+          if (issue.description != null && issue.description!.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              issue.description!,
+              style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+            ),
+          ],
+          if (issue.extractedFacts != null && issue.extractedFacts!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: issue.extractedFacts!.entries.map((e) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryBlue.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '${e.key}: ${e.value}',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.primaryBlue),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInterviewEngineCard(GrievanceModel grievance) {
+    final pendingQuestions = grievance.interviewQuestions.where((q) => q.status == 'PENDING').toList();
+    final answeredQuestions = grievance.interviewQuestions.where((q) => q.status == 'ANSWERED').toList();
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF7C3AED).withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFF7C3AED), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.quiz_rounded, color: Color(0xFF7C3AED), size: 22),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Interactive AI Clarification Interview',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF7C3AED),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'The AI assistant has identified missing facts required to process your grievance faster. Please answer the dynamic questions below:',
+            style: TextStyle(fontSize: 13, color: AppTheme.textPrimary, height: 1.35),
+          ),
+          const SizedBox(height: 14),
+
+          if (pendingQuestions.isNotEmpty) ...[
+            ...pendingQuestions.map((q) {
+              _interviewControllers[q.id] ??= TextEditingController();
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardTheme.color,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.borderLight),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF7C3AED).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            'Q${q.orderIndex}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF7C3AED),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            q.question,
+                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        if (q.required)
+                          const Text(
+                            '* Required',
+                            style: TextStyle(fontSize: 10, color: AppTheme.danger, fontWeight: FontWeight.bold),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _interviewControllers[q.id],
+                      maxLines: 2,
+                      decoration: InputDecoration(
+                        hintText: 'Enter your response here...',
+                        contentPadding: const EdgeInsets.all(10),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+            const SizedBox(height: 6),
+            SizedBox(
+              width: double.infinity,
+              child: CustomButton(
+                text: _isSubmittingInterview ? 'Submitting Answers...' : 'Submit Interview Answers & Re-Analyze',
+                onPressed: _isSubmittingInterview ? null : () => _handleInterviewSubmit(grievance, pendingQuestions),
+              ),
+            ),
+          ],
+
+          if (answeredQuestions.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            const Text(
+              'Answered Interview Questions:',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF7C3AED)),
+            ),
+            const SizedBox(height: 8),
+            ...answeredQuestions.map((q) => Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle_rounded, size: 16, color: AppTheme.success),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          q.question,
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                )),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _handleInterviewSubmit(GrievanceModel grievance, List<GrievanceInterviewQuestionModel> pendingQuestions) async {
+    final responses = <Map<String, String>>[];
+    for (final q in pendingQuestions) {
+      final text = _interviewControllers[q.id]?.text.trim() ?? '';
+      if (text.isNotEmpty) {
+        responses.add({
+          'question_id': q.id,
+          'answer_text': text,
+        });
+      }
+    }
+
+    if (responses.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please answer at least one interview question before submitting.'),
+          backgroundColor: AppTheme.warning,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSubmittingInterview = true;
+    });
+
+    try {
+      final repo = ref.read(grievanceRepositoryProvider);
+      await repo.submitInterviewResponses(
+        grievanceId: grievance.id,
+        responses: responses,
+      );
+      ref.invalidate(myGrievancesProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Interview responses submitted successfully! Grievance re-analyzed.'),
+            backgroundColor: AppTheme.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error submitting answers: ${e.toString()}'),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmittingInterview = false;
+        });
+      }
+    }
   }
 
   Widget _buildClarificationRequiredCard(GrievanceModel grievance) {

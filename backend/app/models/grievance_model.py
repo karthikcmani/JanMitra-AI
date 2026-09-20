@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
-from sqlalchemy import Float, ForeignKey, Integer, JSON, String, Text, DateTime
+from sqlalchemy import Boolean, Float, ForeignKey, Integer, JSON, String, Text, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.session import Base
 
@@ -42,6 +42,14 @@ class AttachmentType:
     SCANNED_DOCUMENT = "scanned_document"
     VOICE_RECORDING = "voice_recording"
     SUPPORTING_EVIDENCE = "supporting_evidence"
+
+
+class InterviewStatus:
+    NOT_REQUIRED = "not_required"
+    NEEDS_INTERVIEW = "needs_interview"
+    IN_PROGRESS = "in_progress"
+    WAITING_FOR_CITIZEN = "waiting_for_citizen"
+    COMPLETED = "completed"
 
 
 class Grievance(Base):
@@ -89,6 +97,19 @@ class Grievance(Base):
         default="medium",
         nullable=False,
     )
+    severity: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Sprint 11 AI Processing fields
+    ai_processing_status: Mapped[Optional[str]] = mapped_column(
+        String(50), default="pending", nullable=True
+    )
+    ai_processed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    ai_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    ai_error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     confirmed_location: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     location_sources: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     category: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
@@ -116,18 +137,202 @@ class Grievance(Base):
         "GrievanceAttachment",
         back_populates="grievance",
         cascade="all, delete-orphan",
+        lazy="selectin",
     )
     audit_logs: Mapped[List["GrievanceAuditLog"]] = relationship(
         "GrievanceAuditLog",
         back_populates="grievance",
         cascade="all, delete-orphan",
+        lazy="selectin",
     )
     analysis: Mapped[Optional["GrievanceAnalysis"]] = relationship(
         "GrievanceAnalysis",
         uselist=False,
         back_populates="grievance",
         cascade="all, delete-orphan",
+        lazy="selectin",
     )
+    issues: Mapped[List["GrievanceIssue"]] = relationship(
+        "GrievanceIssue",
+        back_populates="grievance",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    interview_questions: Mapped[List["GrievanceInterviewQuestion"]] = relationship(
+        "GrievanceInterviewQuestion",
+        back_populates="grievance",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    interview_responses: Mapped[List["GrievanceInterviewResponse"]] = relationship(
+        "GrievanceInterviewResponse",
+        back_populates="grievance",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    ai_runs: Mapped[List["GrievanceAIRun"]] = relationship(
+        "GrievanceAIRun",
+        back_populates="grievance",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+
+class GrievanceIssue(Base):
+    __tablename__ = "grievance_issues"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+        index=True,
+    )
+    grievance_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("grievances.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    issue_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    category: Mapped[str] = mapped_column(String(150), nullable=False)
+    subcategory: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
+    severity: Mapped[str] = mapped_column(String(50), default="MEDIUM", nullable=False)
+    priority: Mapped[str] = mapped_column(String(50), default="MEDIUM", nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="OPEN", nullable=False)
+    extracted_facts: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    interview_status: Mapped[str] = mapped_column(
+        String(50), default=InterviewStatus.NOT_REQUIRED, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    grievance = relationship("Grievance", back_populates="issues")
+    questions = relationship("GrievanceInterviewQuestion", back_populates="issue", cascade="all, delete-orphan")
+
+
+class GrievanceInterviewQuestion(Base):
+    __tablename__ = "grievance_interview_questions"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+        index=True,
+    )
+    grievance_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("grievances.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    issue_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        ForeignKey("grievance_issues.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    question_type: Mapped[str] = mapped_column(String(50), default="TEXT", nullable=False)
+    required: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    order_index: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    grievance = relationship("Grievance", back_populates="interview_questions")
+    issue = relationship("GrievanceIssue", back_populates="questions")
+    responses = relationship("GrievanceInterviewResponse", back_populates="question", cascade="all, delete-orphan")
+
+
+class GrievanceInterviewResponse(Base):
+    __tablename__ = "grievance_interview_responses"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+        index=True,
+    )
+    question_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("grievance_interview_questions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    issue_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        ForeignKey("grievance_issues.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    grievance_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("grievances.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    response_text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    grievance = relationship("Grievance", back_populates="interview_responses")
+    question = relationship("GrievanceInterviewQuestion", back_populates="responses")
+
+
+class GrievanceAIRun(Base):
+    __tablename__ = "grievance_ai_runs"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+        index=True,
+    )
+    grievance_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("grievances.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    operation: Mapped[str] = mapped_column(String(100), nullable=False)
+    model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
+    input_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    output_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    grievance = relationship("Grievance", back_populates="ai_runs")
 
 
 class GrievanceAttachment(Base):

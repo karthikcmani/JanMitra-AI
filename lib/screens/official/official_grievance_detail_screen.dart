@@ -391,7 +391,7 @@ class _OfficialGrievanceDetailScreenState extends ConsumerState<OfficialGrievanc
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
-                  'AI-Assisted Administrative Decision Support Panel',
+                  'AI Grievance Intelligence & Decision Support',
                   style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: AppTheme.primaryBlue),
                 ),
               ),
@@ -409,11 +409,145 @@ class _OfficialGrievanceDetailScreenState extends ConsumerState<OfficialGrievanc
             ],
           ),
           const SizedBox(height: 10),
-          Text('Suggested Authority: $suggestedDept', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-          const SizedBox(height: 4),
+
+          // Severity & Priority Assessment
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppTheme.warning.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: AppTheme.warning.withValues(alpha: 0.4)),
+                ),
+                child: Text(
+                  'SEVERITY: ${(g.severity ?? "MEDIUM").toUpperCase()}',
+                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.warning),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryBlue.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: AppTheme.primaryBlue.withValues(alpha: 0.4)),
+                ),
+                child: Text(
+                  'PRIORITY: ${g.priority.toUpperCase()}',
+                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue),
+                ),
+              ),
+            ],
+          ),
+
+          if (g.summary != null && g.summary!.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            const Text('Fact-Bounded Executive Summary:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+            const SizedBox(height: 2),
+            Text(
+              g.summary!,
+              style: const TextStyle(fontSize: 12, height: 1.35, color: Colors.black87),
+            ),
+          ],
+
+          const SizedBox(height: 10),
+          Text('Suggested Authority: $suggestedDept', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          const SizedBox(height: 2),
           Text('Statutory Reference: $statutory', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87)),
-          const SizedBox(height: 6),
-          Text('AI Reasoning: $reasoning', style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.black87)),
+          const SizedBox(height: 4),
+          Text('AI Reasoning: $reasoning', style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.black87)),
+
+          // Multi-Issue Breakdown
+          if (g.issues.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Text('Detected Sub-Issues Taxonomy:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.primaryBlue)),
+            const SizedBox(height: 6),
+            ...g.issues.map((issue) => Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Issue #${issue.issueNumber}: ${issue.title}',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
+                          ),
+                          Text(
+                            '${issue.category}${issue.subcategory != null ? " / ${issue.subcategory}" : ""}',
+                            style: const TextStyle(fontSize: 10, color: AppTheme.primaryBlue, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                      if (issue.description != null && issue.description!.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(issue.description!, style: const TextStyle(fontSize: 11, color: Colors.black87)),
+                      ],
+                      if (issue.extractedFacts != null && issue.extractedFacts!.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 4,
+                          runSpacing: 4,
+                          children: issue.extractedFacts!.entries.map((e) => Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '${e.key}: ${e.value}',
+                                  style: TextStyle(fontSize: 10, color: Colors.blue.shade900, fontWeight: FontWeight.w600),
+                                ),
+                              )).toList(),
+                        ),
+                      ],
+                    ],
+                  ),
+                )),
+          ],
+
+          // Dynamic Interview Engine Status
+          if (g.interviewQuestions.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Text('AI Interview Engine Clarification Status:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF7C3AED))),
+            const SizedBox(height: 6),
+            ...g.interviewQuestions.map((q) => Container(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.purple.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        q.status == 'ANSWERED' ? Icons.check_circle_rounded : Icons.pending_outlined,
+                        size: 16,
+                        color: q.status == 'ANSWERED' ? AppTheme.success : Colors.purple,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Q: ${q.question} [Status: ${q.status}]',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.black87),
+                        ),
+                      ),
+                    ],
+                  ),
+                )),
+          ],
+
           const SizedBox(height: 10),
           Container(
             padding: const EdgeInsets.all(8),

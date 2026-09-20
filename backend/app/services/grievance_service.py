@@ -394,11 +394,15 @@ class GrievanceService:
         self.repo.db.add(audit_log)
         await self.repo.db.commit()
 
-        # Trigger AI analysis & routing pipeline
+        # Trigger AI analysis, Sprint 11 intelligence & routing pipeline
         try:
             from app.services.official_service import OfficialService
             official_service = OfficialService(self.repo.db)
             await official_service.process_document_and_route(grievance.id, citizen_id)
+
+            from app.services.ai_intelligence_service import AIIntelligenceService
+            ai_intel = AIIntelligenceService(self.repo.db)
+            await ai_intel.analyze_grievance_intelligence(grievance.id)
         except Exception:
             pass
 

@@ -44,13 +44,20 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 async def init_db_schema():
     from sqlalchemy import text
+    from app.models.grievance_model import Base as GrievanceBase
     async with engine.begin() as conn:
+        await conn.run_sync(GrievanceBase.metadata.create_all)
         for stmt in [
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS department_id VARCHAR(150);",
             "ALTER TABLE grievances ADD COLUMN IF NOT EXISTS assigned_official_id VARCHAR(36);",
+            "ALTER TABLE grievances ADD COLUMN IF NOT EXISTS ai_processing_status VARCHAR(50);",
+            "ALTER TABLE grievances ADD COLUMN IF NOT EXISTS ai_processed_at TIMESTAMP WITH TIME ZONE;",
+            "ALTER TABLE grievances ADD COLUMN IF NOT EXISTS ai_model VARCHAR(100);",
+            "ALTER TABLE grievances ADD COLUMN IF NOT EXISTS ai_error_message TEXT;",
+            "ALTER TABLE grievances ADD COLUMN IF NOT EXISTS summary TEXT;",
+            "ALTER TABLE grievances ADD COLUMN IF NOT EXISTS severity VARCHAR(20);",
         ]:
             try:
                 await conn.execute(text(stmt))
             except Exception:
                 pass
-
