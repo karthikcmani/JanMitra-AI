@@ -631,7 +631,8 @@ class OfficialService:
         if department_id is not None:
             user.department_id = department_id
 
-        await self.db.flush()
+        await self.db.commit()
+        await self.db.refresh(user)
         return {
             "id": user.id,
             "full_name": user.full_name,

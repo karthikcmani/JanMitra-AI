@@ -26,6 +26,7 @@ class UserRepository:
             phone=user_in.phone,
             password_hash=password_hash,
             role=user_in.role,
+            department_id=user_in.department_id,
             is_active=True,
         )
         self.db.add(db_user)
