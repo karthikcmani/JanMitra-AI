@@ -1,9 +1,9 @@
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.session import get_db
-from app.dependencies.auth_deps import get_current_user
+from app.dependencies.auth_deps import get_current_user, get_optional_user
 from app.models.grievance_model import AttachmentType
 from app.schemas.grievance_schema import (
     GrievanceAttachmentResponse,
@@ -97,13 +97,16 @@ async def download_grievance_attachment(
     grievance_id: str,
     attachment_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user),
+    current_user: Optional[UserResponse] = Depends(get_optional_user),
 ):
     service = GrievanceService(db)
+    citizen_id = current_user.id if current_user else ""
+    role = current_user.role if current_user else "citizen"
     abs_path, mime_type, original_filename = await service.get_attachment_file(
-        citizen_id=current_user.id,
+        citizen_id=citizen_id,
         grievance_id=grievance_id,
         attachment_id=attachment_id,
+        role=role,
     )
     return FileResponse(
         path=abs_path,

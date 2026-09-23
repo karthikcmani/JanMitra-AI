@@ -186,10 +186,14 @@ class GrievanceService:
         return GrievanceAttachmentResponse.model_validate(attachment)
 
     async def get_attachment_file(
-        self, citizen_id: str, grievance_id: str, attachment_id: str
+        self, citizen_id: str, grievance_id: str, attachment_id: str, role: str = "citizen"
     ) -> Tuple[Path, str, str]:
-        # 1. Ownership verification
-        grievance = await self.repo.get_user_grievance(grievance_id, citizen_id)
+        # 1. Ownership or Administrative verification
+        if role in ("official", "admin") or not citizen_id:
+            grievance = await self.repo.get_by_id(grievance_id)
+        else:
+            grievance = await self.repo.get_user_grievance(grievance_id, citizen_id)
+
         if not grievance:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

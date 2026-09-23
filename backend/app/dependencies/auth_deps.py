@@ -10,6 +10,30 @@ from app.schemas.user_schema import UserResponse
 reusable_oauth2 = OAuth2PasswordBearer(
     tokenUrl="/api/v1/auth/login"
 )
+reusable_oauth2_optional = OAuth2PasswordBearer(
+    tokenUrl="/api/v1/auth/login",
+    auto_error=False,
+)
+from typing import Optional
+
+
+async def get_optional_user(
+    db: AsyncSession = Depends(get_db),
+    token: Optional[str] = Depends(reusable_oauth2_optional),
+) -> Optional[UserResponse]:
+    if not token:
+        return None
+    payload = security.decode_token(token)
+    if not payload:
+        return None
+    user_id = payload.get("sub")
+    if not user_id:
+        return None
+    user_repo = UserRepository(db)
+    user = await user_repo.get_by_id(user_id)
+    if not user or not user.is_active:
+        return None
+    return UserResponse.model_validate(user)
 
 
 async def get_current_user(

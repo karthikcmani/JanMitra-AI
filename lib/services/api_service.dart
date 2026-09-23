@@ -96,6 +96,7 @@ class ApiService {
   Dio get dio => _dio;
 
   String get currentBaseUrl => _dio.options.baseUrl;
+  String get baseUrl => _dio.options.baseUrl;
 
   void updateBaseUrl(String newUrl) {
     String formattedUrl = newUrl.trim();

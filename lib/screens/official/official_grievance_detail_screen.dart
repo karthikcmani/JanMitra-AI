@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/grievance_model.dart';
+import '../../providers/theme_provider.dart';
 import '../../repositories/official_repository.dart';
 import '../../theme/app_theme.dart';
 
@@ -358,6 +359,19 @@ class _OfficialGrievanceDetailScreenState extends ConsumerState<OfficialGrievanc
                             style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.black87),
                           ),
                         ],
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            icon: const Icon(Icons.remove_red_eye_outlined, size: 16),
+                            label: const Text('View Original Document', style: TextStyle(fontSize: 11)),
+                            onPressed: () => _showAttachmentPreview(context, g.id, att),
+                          ),
+                        ),
                       ],
                     ),
                   );
@@ -753,5 +767,100 @@ class _OfficialGrievanceDetailScreenState extends ConsumerState<OfficialGrievanc
       default:
         return Colors.orange;
     }
+  }
+
+  void _showAttachmentPreview(BuildContext context, String grievanceId, GrievanceAttachmentModel att) {
+    final baseUrl = ref.read(apiServiceProvider).baseUrl;
+    final fileUrl = '$baseUrl/grievances/$grievanceId/attachments/${att.id}';
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  const Icon(Icons.description_outlined, color: AppTheme.primaryBlue, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      att.originalFilename.isNotEmpty ? att.originalFilename : 'Original Citizen Document',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Flexible(
+              child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.75,
+                ),
+                color: Colors.black87,
+                child: InteractiveViewer(
+                  panEnabled: true,
+                  minScale: 0.5,
+                  maxScale: 4.0,
+                  child: Center(
+                    child: Image.network(
+                      fileUrl,
+                      fit: BoxFit.contain,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(32),
+                            child: CircularProgressIndicator(color: Colors.white),
+                          ),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        return Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.broken_image_outlined, size: 48, color: Colors.white70),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Unable to load preview: $error',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('Close'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
