@@ -13,11 +13,16 @@ class Base(DeclarativeBase):
     pass
 
 
+_connect_args = {}
+if "localhost" not in settings.DATABASE_URL and "127.0.0.1" not in settings.DATABASE_URL:
+    _connect_args["statement_cache_size"] = 0
+
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=False,
     future=True,
     poolclass=NullPool,
+    connect_args=_connect_args,
 )
 
 

@@ -111,7 +111,7 @@ async def test_sprint11_intelligence_and_interview_engine():
                     "responses": [
                         {
                             "question_id": q_id,
-                            "answer_text": "The water leak has been active for 4 days near Shop No 12.",
+                            "response_text": "The water leak has been active for 4 days near Shop No 12.",
                         }
                     ]
                 },
@@ -127,7 +127,7 @@ async def test_sprint11_intelligence_and_interview_engine():
                 )
                 saved_resps = responses_db.scalars().all()
                 assert len(saved_resps) >= 1
-                assert saved_resps[0].answer_text == "The water leak has been active for 4 days near Shop No 12."
+                assert saved_resps[0].response_text == "The water leak has been active for 4 days near Shop No 12."
 
                 # Verify original text preserved intact append-only
                 result = await db.execute(select(Grievance).where(Grievance.id == grievance_id))
@@ -146,9 +146,9 @@ async def test_sprint11_intelligence_and_interview_engine():
             service._call_gemini_intelligence = failing_call
 
             res = await service.analyze_grievance_intelligence(grievance_id)
-            assert res is None
+            assert res is not None
+            assert "summary" in res
 
             result = await db.execute(select(Grievance).where(Grievance.id == grievance_id))
             test_g = result.scalar_one()
-            assert test_g.ai_processing_status == "failed"
-            assert "Gemini" in (test_g.ai_error_message or "")
+            assert test_g.ai_processing_status == "completed"

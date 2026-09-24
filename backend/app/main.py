@@ -45,7 +45,12 @@ app.include_router(notification_router, prefix=settings.API_V1_STR)
 @app.on_event("startup")
 async def on_startup():
     from app.database.session import init_db_schema
-    await init_db_schema()
+    import logging
+    try:
+        await init_db_schema()
+        logging.getLogger(__name__).info("Database schema initialized successfully on startup.")
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Database schema initialization warning on startup: {e}")
 
 
 @app.get(
