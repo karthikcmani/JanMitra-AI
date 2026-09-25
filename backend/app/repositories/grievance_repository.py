@@ -106,6 +106,7 @@ class GrievanceRepository:
         mime_type: str,
         storage_path: str,
         file_size_bytes: Optional[int] = None,
+        file_content_base64: Optional[str] = None,
     ) -> GrievanceAttachment:
         attachment = GrievanceAttachment(
             id=str(uuid.uuid4()),
@@ -115,6 +116,7 @@ class GrievanceRepository:
             mime_type=mime_type,
             storage_path=storage_path,
             file_size_bytes=file_size_bytes,
+            file_content_base64=file_content_base64,
         )
         self.db.add(attachment)
 

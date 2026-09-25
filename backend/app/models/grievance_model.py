@@ -323,6 +323,7 @@ class GrievanceAttachment(Base):
     mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
     storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
     file_size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    file_content_base64: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     raw_extracted_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     extraction_status: Mapped[str] = mapped_column(
         String(50),

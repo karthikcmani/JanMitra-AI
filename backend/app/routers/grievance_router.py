@@ -115,6 +115,27 @@ async def download_grievance_attachment(
     )
 
 
+@router.put(
+    "/{grievance_id}/attachments/{attachment_id}/content",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    summary="Update or sync persistent file content for an attachment",
+)
+async def sync_attachment_content(
+    grievance_id: str,
+    attachment_id: str,
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[UserResponse] = Depends(get_optional_user),
+):
+    service = GrievanceService(db)
+    return await service.sync_attachment_base64(
+        grievance_id=grievance_id,
+        attachment_id=attachment_id,
+        file_content_base64=payload.get("file_content_base64", ""),
+    )
+
+
 from app.schemas.grievance_schema import (
     GrievanceAttachmentResponse,
     GrievanceClarificationRequest,

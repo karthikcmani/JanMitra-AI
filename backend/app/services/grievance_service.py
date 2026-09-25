@@ -1,7 +1,7 @@
 import uuid
 import time
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -146,6 +146,12 @@ class GrievanceService:
 
         # 6. Database record creation with orphaned file cleanup fallback
         try:
+            import base64
+            file.file.seek(0)
+            file_bytes = file.file.read()
+            file_b64 = base64.b64encode(file_bytes).decode('ascii')
+            file.file.seek(0)
+
             attachment = await self.repo.create_attachment(
                 grievance_id=grievance_id,
                 actor_id=citizen_id,
@@ -154,6 +160,7 @@ class GrievanceService:
                 mime_type=mime_type,
                 storage_path=storage_path,
                 file_size_bytes=file_size,
+                file_content_base64=file_b64,
             )
         except Exception as e:
             # Clean up orphaned physical file if DB insertion fails
@@ -220,12 +227,49 @@ class GrievanceService:
             )
 
         if not abs_path.exists() or not abs_path.is_file():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Stored attachment file not found.",
-            )
+            if getattr(attachment, "file_content_base64", None):
+                import base64
+                abs_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(abs_path, "wb") as f:
+                    f.write(base64.b64decode(attachment.file_content_base64))
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Stored attachment file not found.",
+                )
 
         return abs_path, attachment.mime_type, attachment.original_filename
+
+    async def sync_attachment_base64(
+        self, grievance_id: str, attachment_id: str, file_content_base64: str
+    ) -> Dict[str, Any]:
+        attachment = await self.repo.get_attachment_for_grievance(
+            grievance_id=grievance_id, attachment_id=attachment_id
+        )
+        if not attachment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Attachment not found.",
+            )
+        attachment.file_content_base64 = file_content_base64
+
+        # Write to local disk cache if possible
+        try:
+            import base64
+            abs_path = self.storage.get_absolute_path(attachment.storage_path)
+            abs_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(abs_path, "wb") as f:
+                f.write(base64.b64decode(file_content_base64))
+        except Exception:
+            pass
+
+        await self.repo.db.commit()
+        await self.repo.db.refresh(attachment)
+        return {
+            "status": "success",
+            "attachment_id": attachment.id,
+            "stored_bytes": len(file_content_base64),
+        }
 
     async def extract_attachment_content(
         self,
