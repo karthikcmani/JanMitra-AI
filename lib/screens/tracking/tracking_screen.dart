@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../models/grievance_model.dart';
 import '../../providers/grievance_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/custom_button.dart';
 
@@ -134,6 +135,11 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
 
                 _buildSummaryCard(currentGrievance),
                 const SizedBox(height: 24),
+
+                if (currentGrievance.attachments.isNotEmpty) ...[
+                  _buildAttachmentsCard(currentGrievance),
+                  const SizedBox(height: 24),
+                ],
 
                 if (currentGrievance.summary != null || currentGrievance.issues.isNotEmpty) ...[
                   _buildAIIntelligenceCard(currentGrievance),
@@ -973,5 +979,196 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildAttachmentsCard(GrievanceModel grievance) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardTheme.color,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppTheme.borderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.attach_file_rounded, color: AppTheme.primaryBlue, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Original Documents & Petitions (${grievance.attachments.length})',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...grievance.attachments.map((att) {
+            final isCompleted = att.extractionStatus == 'completed';
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white.withValues(alpha: 0.04)
+                    : Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.borderLight),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.description_outlined, color: AppTheme.primaryBlue, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          att.originalFilename.isNotEmpty ? att.originalFilename : 'Petition Document',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: isCompleted
+                              ? AppTheme.success.withValues(alpha: 0.15)
+                              : Colors.orange.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          att.extractionStatus.replaceAll('_', ' ').toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: isCompleted ? AppTheme.success : Colors.deepOrange,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (att.rawExtractedText != null && att.rawExtractedText!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    const Text('Extracted Petition Text:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 2),
+                    Text(
+                      att.rawExtractedText!,
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.black87),
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    icon: const Icon(Icons.remove_red_eye_outlined, size: 16),
+                    label: const Text('View Original Document', style: TextStyle(fontSize: 11)),
+                    onPressed: () => _showAttachmentPreview(context, grievance.id, att),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  void _showAttachmentPreview(BuildContext context, String grievanceId, GrievanceAttachmentModel att) {
+    final baseUrl = ref.read(apiServiceProvider).baseUrl;
+    final fileUrl = '$baseUrl/grievances/$grievanceId/attachments/${att.id}';
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  const Icon(Icons.description_outlined, color: AppTheme.primaryBlue, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      att.originalFilename.isNotEmpty ? att.originalFilename : 'Original Citizen Document',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Flexible(
+              child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.75,
+                ),
+                color: Colors.black87,
+                child: InteractiveViewer(
+                  panEnabled: true,
+                  minScale: 0.5,
+                  maxScale: 4.0,
+                  child: Center(
+                    child: Image.network(
+                      fileUrl,
+                      fit: BoxFit.contain,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(32),
+                            child: CircularProgressIndicator(color: Colors.white),
+                          ),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        return Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.broken_image_outlined, size: 48, color: Colors.white70),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Unable to load preview: $error',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('Close'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
