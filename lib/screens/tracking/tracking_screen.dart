@@ -369,11 +369,13 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
             children: [
               _buildMetricBadge('Severity', grievance.severity?.toUpperCase() ?? 'MEDIUM', AppTheme.warning),
-              const SizedBox(width: 8),
-              _buildMetricBadge('Priority', grievance.priority.toUpperCase(), AppTheme.primaryBlue),
+              _buildMetricBadge('Priority Score', '${grievance.priority.toUpperCase()} (${grievance.priorityScore ?? 50}/100)', _getPriorityBadgeColor(grievance.priority)),
+              _buildMetricBadge('SLA Target', '${grievance.slaTargetDays ?? (grievance.priority.toLowerCase() == "critical" ? 2 : grievance.priority.toLowerCase() == "high" ? 5 : 10)} Days', AppTheme.secondaryTeal),
             ],
           ),
           if (summary != null && summary.isNotEmpty) ...[
@@ -974,6 +976,20 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
         return AppTheme.success;
       default:
         return AppTheme.textSecondary;
+    }
+  }
+
+  Color _getPriorityBadgeColor(String priority) {
+    switch (priority.toLowerCase()) {
+      case 'critical':
+        return AppTheme.danger;
+      case 'high':
+        return Colors.deepOrange;
+      case 'medium':
+        return Colors.orange;
+      case 'low':
+      default:
+        return AppTheme.success;
     }
   }
 

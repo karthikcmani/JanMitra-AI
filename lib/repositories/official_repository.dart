@@ -82,6 +82,9 @@ class DepartmentWorkloadModel {
 class AIDecisionSupportModel {
   final String suggestedDepartment;
   final String priority;
+  final int? priorityScore;
+  final Map<String, dynamic>? priorityBreakdown;
+  final int? slaTargetDays;
   final String reasoning;
   final List<String> keyFacts;
   final String statutoryRelevance;
@@ -93,6 +96,9 @@ class AIDecisionSupportModel {
   const AIDecisionSupportModel({
     required this.suggestedDepartment,
     required this.priority,
+    this.priorityScore,
+    this.priorityBreakdown,
+    this.slaTargetDays,
     required this.reasoning,
     required this.keyFacts,
     required this.statutoryRelevance,
@@ -109,6 +115,11 @@ class AIDecisionSupportModel {
     return AIDecisionSupportModel(
       suggestedDepartment: (json['suggested_department'] ?? '') as String,
       priority: (json['priority'] ?? 'medium') as String,
+      priorityScore: (json['priority_score'] as num?)?.toInt(),
+      priorityBreakdown: json['priority_breakdown'] is Map<String, dynamic>
+          ? json['priority_breakdown'] as Map<String, dynamic>
+          : null,
+      slaTargetDays: (json['sla_target_days'] as num?)?.toInt(),
       reasoning: (json['reasoning'] ?? '') as String,
       keyFacts: facts,
       statutoryRelevance: (json['statutory_relevance'] ?? '') as String,

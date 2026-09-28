@@ -443,13 +443,13 @@ class _OfficialGrievanceDetailScreenState extends ConsumerState<OfficialGrievanc
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryBlue.withValues(alpha: 0.15),
+                  color: _getPriorityColor(g.priority).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: AppTheme.primaryBlue.withValues(alpha: 0.4)),
+                  border: Border.all(color: _getPriorityColor(g.priority).withValues(alpha: 0.4)),
                 ),
                 child: Text(
-                  'PRIORITY: ${g.priority.toUpperCase()}',
-                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue),
+                  'PRIORITY: ${g.priority.toUpperCase()} (${g.priorityScore ?? 50}/100)',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _getPriorityColor(g.priority)),
                 ),
               ),
             ],
@@ -471,6 +471,67 @@ class _OfficialGrievanceDetailScreenState extends ConsumerState<OfficialGrievanc
           Text('Statutory Reference: $statutory', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87)),
           const SizedBox(height: 4),
           Text('AI Reasoning: $reasoning', style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.black87)),
+
+          // Priority Intelligence Matrix Card
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 10),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.analytics_outlined,
+                          size: 16,
+                          color: _getPriorityColor(g.priority),
+                        ),
+                        const SizedBox(width: 6),
+                        const Text(
+                          'Priority Intelligence Matrix',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _getPriorityColor(g.priority).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'Score: ${g.priorityScore ?? 50}/100',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: _getPriorityColor(g.priority),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'SLA Resolution Deadline: ${g.slaTargetDays ?? (g.priority.toLowerCase() == "critical" ? 2 : g.priority.toLowerCase() == "high" ? 5 : 10)} Days (${g.priority.toLowerCase() == "critical" ? "48 Hours Fast-track" : "Standard Queue"})',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.black87),
+                ),
+                if (g.decisionSupport?.priorityBreakdown != null) ...[
+                  const SizedBox(height: 8),
+                  const Divider(height: 1),
+                  const SizedBox(height: 8),
+                  ..._buildPriorityFactorsList(g.decisionSupport!.priorityBreakdown!),
+                ],
+              ],
+            ),
+          ),
 
           // Multi-Issue Breakdown
           if (g.issues.isNotEmpty) ...[
@@ -767,6 +828,70 @@ class _OfficialGrievanceDetailScreenState extends ConsumerState<OfficialGrievanc
       default:
         return Colors.orange;
     }
+  }
+
+  Color _getPriorityColor(String priority) {
+    switch (priority.toLowerCase()) {
+      case 'critical':
+        return AppTheme.danger;
+      case 'high':
+        return Colors.deepOrange;
+      case 'medium':
+        return Colors.orange;
+      case 'low':
+      default:
+        return AppTheme.success;
+    }
+  }
+
+  List<Widget> _buildPriorityFactorsList(Map<String, dynamic> factors) {
+    final factorLabels = {
+      'safety_hazard': '1. Public Safety & Hazard Risk (35%)',
+      'community_impact': '2. Community Scope & Reach (25%)',
+      'duration_aging': '3. Duration & Aging Delay (20%)',
+      'vulnerability': '4. Vulnerable Groups Factor (10%)',
+      'essential_utility': '5. Lifeline Utility Category (10%)',
+    };
+
+    return factorLabels.entries.map((entry) {
+      final key = entry.key;
+      final title = entry.value;
+      final data = factors[key];
+      if (data is! Map<String, dynamic>) return const SizedBox.shrink();
+
+      final score = data['score'] ?? 0;
+      final max = data['max'] ?? 10;
+      final desc = data['description']?.toString() ?? '';
+
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black87),
+                  ),
+                ),
+                Text(
+                  '$score / $max pts',
+                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue),
+                ),
+              ],
+            ),
+            if (desc.isNotEmpty)
+              Text(
+                desc,
+                style: const TextStyle(fontSize: 10, color: Colors.black54),
+              ),
+          ],
+        ),
+      );
+    }).toList();
   }
 
   void _showAttachmentPreview(BuildContext context, String grievanceId, GrievanceAttachmentModel att) {

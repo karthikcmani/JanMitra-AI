@@ -1,6 +1,9 @@
 class AIDecisionSupportModel {
   final String suggestedDepartment;
   final String priority;
+  final int? priorityScore;
+  final Map<String, dynamic>? priorityBreakdown;
+  final int? slaTargetDays;
   final String reasoning;
   final List<String> keyFacts;
   final String statutoryRelevance;
@@ -12,6 +15,9 @@ class AIDecisionSupportModel {
   const AIDecisionSupportModel({
     required this.suggestedDepartment,
     required this.priority,
+    this.priorityScore,
+    this.priorityBreakdown,
+    this.slaTargetDays,
     required this.reasoning,
     required this.keyFacts,
     required this.statutoryRelevance,
@@ -28,6 +34,11 @@ class AIDecisionSupportModel {
     return AIDecisionSupportModel(
       suggestedDepartment: (json['suggested_department'] ?? '') as String,
       priority: (json['priority'] ?? 'medium') as String,
+      priorityScore: (json['priority_score'] as num?)?.toInt(),
+      priorityBreakdown: json['priority_breakdown'] is Map<String, dynamic>
+          ? json['priority_breakdown'] as Map<String, dynamic>
+          : null,
+      slaTargetDays: (json['sla_target_days'] as num?)?.toInt(),
       reasoning: (json['reasoning'] ?? '') as String,
       keyFacts: facts,
       statutoryRelevance: (json['statutory_relevance'] ?? '') as String,
@@ -150,6 +161,9 @@ class GrievanceModel {
   final String? translatedText;
   final String status;
   final String priority;
+  final int? priorityScore;
+  final Map<String, dynamic>? priorityBreakdown;
+  final int? slaTargetDays;
   final String? severity;
   final String? summary;
   final String? aiProcessingStatus;
@@ -186,6 +200,9 @@ class GrievanceModel {
     this.translatedText,
     required this.status,
     required this.priority,
+    this.priorityScore,
+    this.priorityBreakdown,
+    this.slaTargetDays,
     this.severity,
     this.summary,
     this.aiProcessingStatus,
@@ -259,6 +276,11 @@ class GrievanceModel {
       translatedText: json['translated_text']?.toString(),
       status: (json['status'] ?? 'draft').toString(),
       priority: (json['priority'] ?? 'medium').toString(),
+      priorityScore: (json['priority_score'] as num?)?.toInt() ?? ds?.priorityScore ?? 50,
+      priorityBreakdown: json['priority_breakdown'] is Map<String, dynamic>
+          ? json['priority_breakdown'] as Map<String, dynamic>
+          : ds?.priorityBreakdown,
+      slaTargetDays: (json['sla_target_days'] as num?)?.toInt() ?? ds?.slaTargetDays,
       severity: json['severity']?.toString(),
       summary: json['summary']?.toString(),
       aiProcessingStatus: json['ai_processing_status']?.toString(),

@@ -108,6 +108,7 @@ class GrievanceResponse(BaseModel):
     translated_text: Optional[str] = None
     status: str
     priority: str
+    priority_score: Optional[int] = 50
     severity: Optional[str] = None
     summary: Optional[str] = None
     ai_processing_status: Optional[str] = "pending"

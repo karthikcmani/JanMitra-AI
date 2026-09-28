@@ -701,12 +701,25 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: (item.priority.toLowerCase() == 'high' || item.priority.toLowerCase() == 'critical' ? AppTheme.danger : Colors.orange).withValues(alpha: 0.15),
+                          color: (item.priority.toLowerCase() == 'critical'
+                                  ? AppTheme.danger
+                                  : item.priority.toLowerCase() == 'high'
+                                      ? Colors.deepOrange
+                                      : Colors.orange)
+                              .withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
-                          item.priority.toUpperCase(),
-                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: item.priority.toLowerCase() == 'high' || item.priority.toLowerCase() == 'critical' ? AppTheme.danger : Colors.orange),
+                          '${item.priority.toUpperCase()} (${item.priorityScore ?? 50})',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: item.priority.toLowerCase() == 'critical'
+                                ? AppTheme.danger
+                                : item.priority.toLowerCase() == 'high'
+                                    ? Colors.deepOrange
+                                    : Colors.orange,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 6),

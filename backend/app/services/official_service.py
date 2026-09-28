@@ -32,6 +32,9 @@ class DepartmentRoutingInfo(BaseModel):
 class AIDecisionSupportPanel(BaseModel):
     suggested_department: str
     priority: str
+    priority_score: Optional[int] = 50
+    priority_breakdown: Optional[Dict[str, Any]] = None
+    sla_target_days: Optional[int] = 7
     reasoning: str
     key_facts: List[str] = []
     statutory_relevance: str
@@ -55,6 +58,9 @@ class OfficialGrievanceDetailResponse(BaseModel):
     raw_ocr_text: Optional[str] = None
     status: str
     priority: str
+    priority_score: Optional[int] = 50
+    priority_breakdown: Optional[Dict[str, Any]] = None
+    sla_target_days: Optional[int] = 7
     predicted_department: Optional[str] = None
     assigned_department: Optional[str] = None
     assigned_official_id: Optional[str] = None
@@ -242,11 +248,37 @@ class OfficialService:
             elif g.status == GrievanceStatus.FORWARDED:
                 next_step = "Track departmental resolution progress with assigned officer."
 
+            from app.services.priority_engine import PriorityIntelligenceEngine
+            p_score = getattr(g, "priority_score", None)
+            p_breakdown = None
+            sla_days = 7
+
+            if analysis and analysis.extracted_entities and isinstance(analysis.extracted_entities, dict):
+                p_eval = analysis.extracted_entities.get("priority_evaluation")
+                if p_eval:
+                    p_score = p_eval.get("priority_score", p_score or 50)
+                    p_breakdown = p_eval.get("factors")
+                    sla_days = p_eval.get("sla_target_days", 7)
+
+            if p_score is None:
+                eval_text = (g.title or "") + " " + (g.description or "") + " " + (raw_ocr or g.original_text or "")
+                p_res = PriorityIntelligenceEngine.evaluate(eval_text, department=dept_suggestion)
+                p_score = p_res.priority_score
+                p_breakdown = p_res.factors
+                sla_days = p_res.sla_target_days
+
             decision_panel = AIDecisionSupportPanel(
                 suggested_department=dept_suggestion,
                 priority=g.priority,
+                priority_score=p_score,
+                priority_breakdown=p_breakdown,
+                sla_target_days=sla_days,
                 reasoning=explanation_text,
-                key_facts=[f"Category: {g.category or 'General'}", f"Language: {g.original_language}"],
+                key_facts=[
+                    f"Category: {g.category or 'General'}",
+                    f"Language: {g.original_language}",
+                    f"Priority Score: {p_score}/100 (SLA: {sla_days} days)",
+                ],
                 statutory_relevance=statutory_info,
                 missing_information=missing_info,
                 suggested_next_step=next_step,
@@ -268,6 +300,9 @@ class OfficialService:
                     raw_ocr_text=raw_ocr if raw_ocr else g.original_text,
                     status=g.status,
                     priority=g.priority,
+                    priority_score=p_score,
+                    priority_breakdown=p_breakdown,
+                    sla_target_days=sla_days,
                     predicted_department=analysis.predicted_category if analysis else None,
                     assigned_department=g.department_id,
                     assigned_official_id=getattr(g, "assigned_official_id", None),
@@ -381,6 +416,19 @@ class OfficialService:
             "engine": engine_name,
         }
 
+        # Multi-factor Priority Evaluation
+        from app.services.priority_engine import PriorityIntelligenceEngine
+        p_eval = PriorityIntelligenceEngine.evaluate(combined_text, department=dept_name)
+        entities["priority_evaluation"] = {
+            "priority": p_eval.priority,
+            "priority_score": p_eval.priority_score,
+            "sla_target_days": p_eval.sla_target_days,
+            "sla_target_hours": p_eval.sla_target_hours,
+            "factors": p_eval.factors,
+            "rationale": p_eval.rationale,
+            "rationale_ml": p_eval.rationale_ml,
+        }
+
         if not analysis:
             analysis = GrievanceAnalysis(
                 grievance_id=grievance_id,
@@ -400,6 +448,8 @@ class OfficialService:
         prev_status = grievance.status
         grievance.category = category_name
         grievance.department_id = dept_name
+        grievance.priority = p_eval.priority.lower()
+        grievance.priority_score = p_eval.priority_score
         grievance.status = GrievanceStatus.UNDER_ANALYSIS
         grievance.updated_at = datetime.now(timezone.utc)
 
@@ -412,7 +462,7 @@ class OfficialService:
             action_type="DOCUMENT_PROCESSED_AND_ROUTED",
             previous_state=prev_status,
             new_state=grievance.status,
-            remarks=f"Document OCR processed. Automatically matched department: {dept_name}.",
+            remarks=f"Document OCR processed. Matched department: {dept_name}. Priority: {p_eval.priority} ({p_eval.priority_score}/100, SLA: {p_eval.sla_target_days}d).",
         )
         self.db.add(audit_log)
         await self.db.flush()
@@ -554,15 +604,11 @@ class OfficialService:
             all_grievances = await self.search_official_grievances(department_id=department_id)
 
         def attention_sort_key(g: OfficialGrievanceDetailResponse):
-            priority_score = 0
-            if g.priority.lower() in ("critical", "high"):
-                priority_score = 3
-            elif g.status == "clarification_required":
-                priority_score = 2
-            elif g.status in ("under_analysis", "intake_received"):
-                priority_score = 1
-
-            return (priority_score, -g.created_at.timestamp())
+            base_score = g.priority_score if g.priority_score is not None else 50
+            # Extra urgency weighting for citizen clarification responses awaiting official action
+            if g.status == "clarification_required":
+                base_score += 5
+            return (base_score, -g.created_at.timestamp())
 
         sorted_queue = sorted(all_grievances, key=attention_sort_key, reverse=True)
         return sorted_queue

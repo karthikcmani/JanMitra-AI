@@ -63,6 +63,7 @@ async def init_db_schema():
             "ALTER TABLE grievances ADD COLUMN IF NOT EXISTS ai_error_message TEXT;",
             "ALTER TABLE grievances ADD COLUMN IF NOT EXISTS summary TEXT;",
             "ALTER TABLE grievances ADD COLUMN IF NOT EXISTS severity VARCHAR(20);",
+            "ALTER TABLE grievances ADD COLUMN IF NOT EXISTS priority_score INTEGER DEFAULT 50;",
             "ALTER TABLE grievance_attachments ADD COLUMN IF NOT EXISTS file_content_base64 TEXT;",
         ]:
             try:

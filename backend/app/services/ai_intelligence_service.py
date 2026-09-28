@@ -241,15 +241,47 @@ Respond ONLY with a valid JSON object matching this exact schema:
                 ]
             }
 
-        # 4. Save analysis results to Grievance and child entities
+        # 4. Multi-factor Priority Intelligence Evaluation
+        from app.services.priority_engine import PriorityIntelligenceEngine
+
+        extracted_facts_all = {}
+        for issue_item in llm_response_data.get("issues", []):
+            if isinstance(issue_item, dict) and "extracted_facts" in issue_item:
+                extracted_facts_all.update(issue_item["extracted_facts"] or {})
+
+        dept_for_priority = grievance.department_id or (
+            llm_response_data.get("issues", [{}])[0].get("category")
+            if llm_response_data.get("issues")
+            else "General"
+        )
+
+        priority_res = PriorityIntelligenceEngine.evaluate(
+            text=combined_text,
+            department=dept_for_priority,
+            extracted_facts=extracted_facts_all,
+        )
+
+        llm_response_data["priority_evaluation"] = {
+            "priority": priority_res.priority,
+            "priority_score": priority_res.priority_score,
+            "sla_target_days": priority_res.sla_target_days,
+            "sla_target_hours": priority_res.sla_target_hours,
+            "factors": priority_res.factors,
+            "rationale": priority_res.rationale,
+            "rationale_ml": priority_res.rationale_ml,
+        }
+        llm_response_data["overall_priority"] = priority_res.priority
+
+        # 5. Save analysis results to Grievance and child entities
         now = datetime.now(timezone.utc)
         summary_text = llm_response_data.get("summary", "")
         severity_val = llm_response_data.get("overall_severity", "MEDIUM")
-        priority_val = llm_response_data.get("overall_priority", "MEDIUM")
+        priority_val = priority_res.priority
 
         grievance.summary = summary_text
         grievance.severity = severity_val
         grievance.priority = priority_val.lower()
+        grievance.priority_score = priority_res.priority_score
         grievance.ai_processing_status = "completed"
         grievance.ai_processed_at = now
         grievance.ai_model = used_model

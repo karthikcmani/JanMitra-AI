@@ -48,6 +48,16 @@ class GrievanceService:
             grievance_number=grievance_no,
         )
 
+        # Initial Multi-factor Priority Evaluation
+        from app.services.priority_engine import PriorityIntelligenceEngine
+        p_eval = PriorityIntelligenceEngine.evaluate(
+            (draft_in.title or "") + " " + (draft_in.description or "") + " " + (draft_in.original_text or ""),
+            department=draft_in.category,
+        )
+        db_grievance.priority = p_eval.priority.lower()
+        db_grievance.priority_score = p_eval.priority_score
+        await self.repo.db.flush()
+
         # Trigger AI analysis for direct_text grievances immediately and transition status to INTAKE_RECEIVED
         if draft_in.intake_mode == "direct_text" and (draft_in.original_text or draft_in.title):
             try:

@@ -84,6 +84,11 @@ class Grievance(Base):
         default="medium",
         nullable=False,
     )
+    priority_score: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        default=50,
+        nullable=True,
+    )
     severity: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Sprint 11 AI Processing fields
