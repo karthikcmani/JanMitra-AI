@@ -663,6 +663,27 @@ class OfficialService:
             for u in users
         ]
 
+    async def get_all_citizen_users(self) -> List[Dict[str, Any]]:
+        from sqlalchemy import func
+        stmt = select(User).where(User.role == "citizen").order_by(User.created_at.asc())
+        res = await self.db.execute(stmt)
+        users = res.scalars().all()
+        results = []
+        for u in users:
+            g_stmt = select(func.count(Grievance.id)).where(Grievance.citizen_id == u.id)
+            g_res = await self.db.execute(g_stmt)
+            count = g_res.scalar() or 0
+            results.append({
+                "id": u.id,
+                "full_name": u.full_name,
+                "email": u.email,
+                "phone": u.phone,
+                "role": u.role,
+                "grievance_count": count,
+                "created_at": u.created_at.isoformat() if u.created_at else None,
+            })
+        return results
+
     async def update_official_user_status(
         self, user_id: str, is_active: Optional[bool] = None, department_id: Optional[str] = None
     ) -> Dict[str, Any]:

@@ -100,6 +100,20 @@ async def get_admin_official_users(
     return await service.get_all_official_users()
 
 
+@router.get(
+    "/admin/citizens",
+    response_model=List[dict],
+    status_code=status.HTTP_200_OK,
+    summary="Retrieve roster of registered citizens and their grievance count",
+)
+async def get_admin_citizen_users(
+    db: AsyncSession = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_admin),
+):
+    service = OfficialService(db)
+    return await service.get_all_citizen_users()
+
+
 @router.put(
     "/admin/users/{user_id}",
     response_model=dict,
