@@ -58,7 +58,12 @@ class GrievanceRepository:
         await self.db.refresh(grievance)
         res = await self.db.execute(
             select(Grievance)
-            .options(selectinload(Grievance.audit_logs))
+            .options(
+                selectinload(Grievance.audit_logs),
+                selectinload(Grievance.attachments),
+                selectinload(Grievance.issues),
+                selectinload(Grievance.interview_questions),
+            )
             .where(Grievance.id == grievance.id)
         )
         return res.scalar_one()
@@ -66,7 +71,12 @@ class GrievanceRepository:
     async def get_by_id(self, grievance_id: str) -> Optional[Grievance]:
         result = await self.db.execute(
             select(Grievance)
-            .options(selectinload(Grievance.audit_logs))
+            .options(
+                selectinload(Grievance.audit_logs),
+                selectinload(Grievance.attachments),
+                selectinload(Grievance.issues),
+                selectinload(Grievance.interview_questions),
+            )
             .where(Grievance.id == grievance_id)
         )
         return result.scalar_one_or_none()
@@ -76,7 +86,12 @@ class GrievanceRepository:
     ) -> Optional[Grievance]:
         result = await self.db.execute(
             select(Grievance)
-            .options(selectinload(Grievance.audit_logs))
+            .options(
+                selectinload(Grievance.audit_logs),
+                selectinload(Grievance.attachments),
+                selectinload(Grievance.issues),
+                selectinload(Grievance.interview_questions),
+            )
             .where(
                 Grievance.id == grievance_id,
                 Grievance.citizen_id == citizen_id,
@@ -87,7 +102,12 @@ class GrievanceRepository:
     async def get_all_by_citizen_id(self, citizen_id: str) -> List[Grievance]:
         result = await self.db.execute(
             select(Grievance)
-            .options(selectinload(Grievance.audit_logs))
+            .options(
+                selectinload(Grievance.audit_logs),
+                selectinload(Grievance.attachments),
+                selectinload(Grievance.issues),
+                selectinload(Grievance.interview_questions),
+            )
             .where(
                 Grievance.citizen_id == citizen_id,
                 Grievance.status != GrievanceStatus.DRAFT,

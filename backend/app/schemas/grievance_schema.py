@@ -96,6 +96,25 @@ class GrievanceAIRunResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class GrievanceAttachmentResponse(BaseModel):
+    id: str
+    grievance_id: str
+    attachment_type: str
+    original_filename: str
+    mime_type: str
+    storage_path: str
+    file_size_bytes: Optional[int] = None
+    raw_extracted_text: Optional[str] = None
+    extraction_status: str = "pending"
+    extraction_confidence: Optional[float] = None
+    extraction_engine: Optional[str] = None
+    extraction_error: Optional[str] = None
+    extracted_at: Optional[datetime] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class GrievanceResponse(BaseModel):
     id: str
     grievance_number: str
@@ -119,29 +138,11 @@ class GrievanceResponse(BaseModel):
     department_id: Optional[str] = None
     confirmed_location: Optional[Dict[str, Any]] = None
     location_sources: Optional[Dict[str, Any]] = None
+    attachments: List[GrievanceAttachmentResponse] = []
     audit_logs: List[GrievanceAuditLogResponse] = []
     issues: List[GrievanceIssueResponse] = []
     interview_questions: List[GrievanceInterviewQuestionResponse] = []
     created_at: datetime
     updated_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class GrievanceAttachmentResponse(BaseModel):
-    id: str
-    grievance_id: str
-    attachment_type: str
-    original_filename: str
-    mime_type: str
-    storage_path: str
-    file_size_bytes: Optional[int] = None
-    raw_extracted_text: Optional[str] = None
-    extraction_status: str = "pending"
-    extraction_confidence: Optional[float] = None
-    extraction_engine: Optional[str] = None
-    extraction_error: Optional[str] = None
-    extracted_at: Optional[datetime] = None
-    created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
