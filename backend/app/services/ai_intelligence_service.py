@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 import httpx
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.grievance_model import (
@@ -290,11 +290,30 @@ Respond ONLY with a valid JSON object matching this exact schema:
         ai_run.output_data = llm_response_data
         ai_run.completed_at = now
 
-        # Clear existing issues and questions to avoid duplicate accumulation
-        await self.db.execute(select(GrievanceIssue).where(GrievanceIssue.grievance_id == grievance_id))
+        # Clear existing PENDING interview questions and open issues to avoid duplicate accumulation
+        await self.db.execute(
+            delete(GrievanceInterviewQuestion).where(
+                GrievanceInterviewQuestion.grievance_id == grievance_id,
+                GrievanceInterviewQuestion.status == "PENDING",
+            )
+        )
+        await self.db.execute(
+            delete(GrievanceIssue).where(GrievanceIssue.grievance_id == grievance_id)
+        )
+        await self.db.flush()
+
+        # Query existing answered questions to never duplicate or re-ask them
+        answered_q_res = await self.db.execute(
+            select(GrievanceInterviewQuestion.question).where(
+                GrievanceInterviewQuestion.grievance_id == grievance_id,
+                GrievanceInterviewQuestion.status == "ANSWERED",
+            )
+        )
+        answered_texts = {q.strip().lower() for q in answered_q_res.scalars().all()}
 
         raw_issues = llm_response_data.get("issues", [])
         total_questions = 0
+        seen_question_texts = set(answered_texts)
 
         for i_data in raw_issues:
             issue = GrievanceIssue(
@@ -314,15 +333,19 @@ Respond ONLY with a valid JSON object matching this exact schema:
             await self.db.flush()
 
             raw_questions = i_data.get("interview_questions", [])
-            for q_idx, q_data in enumerate(raw_questions, start=1):
+            for q_data in raw_questions:
+                q_text = (q_data.get("question") or "").strip()
+                if not q_text or q_text.lower() in seen_question_texts:
+                    continue
+                seen_question_texts.add(q_text.lower())
                 total_questions += 1
                 q_entity = GrievanceInterviewQuestion(
                     grievance_id=grievance_id,
                     issue_id=issue.id,
-                    question=q_data.get("question"),
+                    question=q_text,
                     question_type=q_data.get("question_type", "TEXT"),
                     required=q_data.get("required", True),
-                    order_index=q_idx,
+                    order_index=total_questions,
                     status="PENDING",
                 )
                 self.db.add(q_entity)
@@ -359,7 +382,7 @@ Respond ONLY with a valid JSON object matching this exact schema:
 
         for resp in responses:
             q_id = resp.get("question_id")
-            text_val = resp.get("response_text", "").strip()
+            text_val = (resp.get("response_text") or resp.get("answer_text") or "").strip()
             if not q_id or not text_val:
                 continue
 

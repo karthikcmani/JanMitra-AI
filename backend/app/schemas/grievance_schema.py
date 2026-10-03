@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.models.grievance_model import GrievanceStatus, IntakeMode
 
 
@@ -74,7 +74,17 @@ class GrievanceInterviewQuestionResponse(BaseModel):
 
 class SingleInterviewResponseItem(BaseModel):
     question_id: str
-    response_text: str = Field(..., min_length=1)
+    response_text: Optional[str] = None
+    answer_text: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reconcile_answers(cls, data: Any):
+        if isinstance(data, dict):
+            val = data.get("response_text") or data.get("answer_text") or ""
+            data["response_text"] = val
+            data["answer_text"] = val
+        return data
 
 
 class GrievanceInterviewResponseRequest(BaseModel):
@@ -136,6 +146,7 @@ class GrievanceResponse(BaseModel):
     ai_error_message: Optional[str] = None
     category: Optional[str] = None
     department_id: Optional[str] = None
+    official_clarification_question: Optional[str] = None
     confirmed_location: Optional[Dict[str, Any]] = None
     location_sources: Optional[Dict[str, Any]] = None
     attachments: List[GrievanceAttachmentResponse] = []

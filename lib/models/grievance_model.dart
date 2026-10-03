@@ -177,6 +177,7 @@ class GrievanceModel {
   final String? rawOcrText;
   final String? predictedDepartment;
   final String? assignedDepartment;
+  final String? officialClarificationQuestion;
   final String? aiExplanation;
   final AIDecisionSupportModel? decisionSupport;
   final List<GrievanceAttachmentModel> attachments;
@@ -214,6 +215,7 @@ class GrievanceModel {
     this.rawOcrText,
     this.predictedDepartment,
     this.assignedDepartment,
+    this.officialClarificationQuestion,
     this.aiExplanation,
     this.decisionSupport,
     this.attachments = const [],
@@ -292,6 +294,7 @@ class GrievanceModel {
       rawOcrText: json['raw_ocr_text']?.toString(),
       predictedDepartment: json['predicted_department']?.toString(),
       assignedDepartment: json['assigned_department']?.toString(),
+      officialClarificationQuestion: json['official_clarification_question']?.toString(),
       aiExplanation: json['ai_explanation']?.toString(),
       decisionSupport: ds,
       attachments: parsedAtts,

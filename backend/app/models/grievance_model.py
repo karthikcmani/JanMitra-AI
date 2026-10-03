@@ -109,6 +109,7 @@ class Grievance(Base):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
+    official_clarification_question: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

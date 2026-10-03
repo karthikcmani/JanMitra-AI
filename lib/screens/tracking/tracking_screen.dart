@@ -514,8 +514,14 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   }
 
   Widget _buildInterviewEngineCard(GrievanceModel grievance) {
-    final pendingQuestions = grievance.interviewQuestions.where((q) => q.status == 'PENDING').toList();
-    final answeredQuestions = grievance.interviewQuestions.where((q) => q.status == 'ANSWERED').toList();
+    final seenPending = <String>{};
+    final pendingQuestions = grievance.interviewQuestions
+        .where((q) => q.status == 'PENDING' && seenPending.add(q.question.trim().toLowerCase()))
+        .toList();
+    final seenAnswered = <String>{};
+    final answeredQuestions = grievance.interviewQuestions
+        .where((q) => q.status == 'ANSWERED' && seenAnswered.add(q.question.trim().toLowerCase()))
+        .toList();
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -551,7 +557,9 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
           const SizedBox(height: 14),
 
           if (pendingQuestions.isNotEmpty) ...[
-            ...pendingQuestions.map((q) {
+            ...pendingQuestions.asMap().entries.map((entry) {
+              final idx = entry.key;
+              final q = entry.value;
               _interviewControllers[q.id] ??= TextEditingController();
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -573,7 +581,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
-                            'Q${q.orderIndex}',
+                            'Q${idx + 1}',
                             style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w800,
@@ -659,6 +667,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
       if (text.isNotEmpty) {
         responses.add({
           'question_id': q.id,
+          'response_text': text,
           'answer_text': text,
         });
       }
@@ -712,6 +721,16 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   }
 
   Widget _buildClarificationRequiredCard(GrievanceModel grievance) {
+    String? officialNote = grievance.officialClarificationQuestion;
+    if (officialNote == null || officialNote.trim().isEmpty) {
+      for (final log in grievance.auditLogs.reversed) {
+        if (log.actorRole == 'official' && (log.remarks?.isNotEmpty ?? false)) {
+          officialNote = log.remarks;
+          break;
+        }
+      }
+    }
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -738,10 +757,58 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
           ),
           const SizedBox(height: 10),
           const Text(
-            'The reviewing officer has requested additional details regarding your petition. Please enter your clarification response below:',
+            'The reviewing officer has requested additional details regarding your petition. Please review the officer\'s instructions below:',
             style: TextStyle(fontSize: 13, color: AppTheme.textPrimary),
           ),
-          const SizedBox(height: 12),
+          if (officialNote != null && officialNote.trim().isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.amber.shade700, width: 1.5),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.assignment_ind_rounded, size: 20, color: Colors.amber.shade900),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Officer\'s Specific Clarification Request:',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.amber.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    officialNote.trim(),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1E293B),
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          const Text(
+            'Enter your clarification response below:',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+          ),
+          const SizedBox(height: 8),
           TextField(
             controller: _clarificationController,
             maxLines: 3,

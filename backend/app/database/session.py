@@ -64,7 +64,19 @@ async def init_db_schema():
             "ALTER TABLE grievances ADD COLUMN IF NOT EXISTS summary TEXT;",
             "ALTER TABLE grievances ADD COLUMN IF NOT EXISTS severity VARCHAR(20);",
             "ALTER TABLE grievances ADD COLUMN IF NOT EXISTS priority_score INTEGER DEFAULT 50;",
+            "ALTER TABLE grievances ADD COLUMN IF NOT EXISTS official_clarification_question TEXT;",
             "ALTER TABLE grievance_attachments ADD COLUMN IF NOT EXISTS file_content_base64 TEXT;",
+            """
+            DELETE FROM grievance_interview_questions
+            WHERE id IN (
+                SELECT id FROM (
+                    SELECT id, ROW_NUMBER() OVER (PARTITION BY grievance_id, question, status ORDER BY created_at ASC) as rnum
+                    FROM grievance_interview_questions
+                    WHERE status = 'PENDING'
+                ) t
+                WHERE t.rnum > 1
+            );
+            """,
         ]:
             try:
                 await conn.execute(text(stmt))

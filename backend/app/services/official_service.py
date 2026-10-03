@@ -66,6 +66,7 @@ class OfficialGrievanceDetailResponse(BaseModel):
     assigned_official_id: Optional[str] = None
     assigned_official_name: Optional[str] = None
     category: Optional[str] = None
+    official_clarification_question: Optional[str] = None
     legal_grounding_references: Optional[Dict[str, Any]] = None
     ai_explanation: Optional[str] = None
     decision_support: Optional[AIDecisionSupportPanel] = None
@@ -491,6 +492,13 @@ class OfficialService:
 
         if action_in.new_status:
             grievance.status = action_in.new_status
+
+        if action_in.question:
+            grievance.official_clarification_question = action_in.question
+        elif action_in.new_status == "clarification_required" and action_in.remarks:
+            grievance.official_clarification_question = action_in.remarks
+        elif action_in.new_status and action_in.new_status != "clarification_required":
+            grievance.official_clarification_question = None
 
         grievance.updated_at = datetime.now(timezone.utc)
 
