@@ -112,26 +112,37 @@ class OfficialActionRequest(BaseModel):
 class OfficialService:
     DEPARTMENT_RULES = [
         {
-            "code": "KWA",
-            "name": "Kerala Water Authority (KWA)",
-            "category": "Water Supply & Drainage",
-            "keywords": ["കുടിവെള്ളം", "പൈപ്പ്", "വെള്ളം", "വാർഡ്", "water", "pipe", "leak", "kwa", "drainage"],
-            "statutory_reference": "Kerala Water Supply and Sewerage Act, 1986 (Section 14)",
-            "legal_explanation": "Complaint relates to public drinking water supply interruption or pipe damage under KWA jurisdiction.",
-        },
-        {
             "code": "PWD",
             "name": "Public Works Department (PWD)",
             "category": "Roads & Public Infrastructure",
-            "keywords": ["റോഡ്", "പണി", "കലുങ്ക്", "പാലം", "കുഴി", "road", "pothole", "bridge", "pwd", "highway"],
+            "keywords": [
+                "പൊതുമരാമത്ത്", "റോഡ്", "റോഡിലെ", "കുഴി", "കുഴികൾ", "പണി", "കലുങ്ക്", "പാലം",
+                "ടാർ", "ടാറിങ്", "ഗതാഗതം", "വാഹനങ്ങൾ", "റോഡുകൾ", "ഹൈവേ", "road", "pothole",
+                "potholes", "bridge", "pwd", "highway", "tarring", "culvert"
+            ],
             "statutory_reference": "Kerala Highway Protection Act, 1999 (Section 7)",
             "legal_explanation": "Complaint involves road maintenance, pothole repair, or culvert construction under PWD oversight.",
+        },
+        {
+            "code": "KWA",
+            "name": "Kerala Water Authority (KWA)",
+            "category": "Water Supply & Drainage",
+            "keywords": [
+                "കുടിവെള്ളം", "കുടിവെള്ള", "പൈപ്പ്", "വെള്ളം", "ചോർച്ച", "പൊട്ടി", "പൈപ്പ് ലൈൻ",
+                "ജല അതോറിറ്റി", "വാട്ടർ അതോറിറ്റി", "water", "pipe", "leak", "leakage", "kwa", "drainage"
+            ],
+            "statutory_reference": "Kerala Water Supply and Sewerage Act, 1986 (Section 14)",
+            "legal_explanation": "Complaint relates to public drinking water supply interruption or pipe damage under KWA jurisdiction.",
         },
         {
             "code": "KSEB",
             "name": "Kerala State Electricity Board (KSEB)",
             "category": "Power & Electricity",
-            "keywords": ["വൈദ്യുതി", "ട്രാൻസ്ഫോർമർ", "പോസ്റ്റ്", "സ്ട്രീറ്റ് ലൈറ്റ്", "power", "electricity", "kseb", "light", "transformer"],
+            "keywords": [
+                "വൈദ്യുതി", "ഇലക്ട്രിക്", "ട്രാൻസ്ഫോർമർ", "പോസ്റ്റ്", "സ്ട്രീറ്റ് ലൈറ്റ്", "വോൾട്ടേജ്",
+                "വൈദ്യുത", "ലൈൻ", "കെ.എസ്.ഇ.ബി", "കെഎസ്ഇബി", "power", "electricity", "kseb", "light",
+                "transformer", "voltage"
+            ],
             "statutory_reference": "Electricity Act, 2003 (Section 43)",
             "legal_explanation": "Complaint pertains to power outages, damaged electricity poles, or transformer faults managed by KSEB.",
         },
@@ -139,7 +150,10 @@ class OfficialService:
             "code": "LSGD",
             "name": "Local Self Government Department (LSGD / Panchayat)",
             "category": "Local Body & Public Health",
-            "keywords": ["മാലിന്യം", "പഞ്ചായത്ത്", "മുനിസിപ്പാലിറ്റി", "വീട്ടുനികുതി", "waste", "sanitation", "panchayat", "municipality", "cleanliness"],
+            "keywords": [
+                "മാലിന്യം", "പഞ്ചായത്ത്", "മുനിസിപ്പാലിറ്റി", "വീട്ടുനികുതി", "ശുചിത്വം", "തെരുവ്",
+                "ഗ്രാമപഞ്ചായത്ത്", "waste", "sanitation", "panchayat", "municipality", "cleanliness"
+            ],
             "statutory_reference": "Kerala Panchayat Raj Act, 1994 (Section 166)",
             "legal_explanation": "Complaint involves local ward sanitation, municipal waste management, or Grama Panchayat civic services.",
         },
@@ -486,6 +500,12 @@ class OfficialService:
 
         if action_in.department_name:
             grievance.department_id = action_in.department_name
+            analysis_res = await self.db.execute(
+                select(GrievanceAnalysis).where(GrievanceAnalysis.grievance_id == grievance_id)
+            )
+            analysis = analysis_res.scalar_one_or_none()
+            if analysis:
+                analysis.predicted_category = action_in.department_name
 
         if action_in.assigned_official_id:
             grievance.assigned_official_id = action_in.assigned_official_id
@@ -572,7 +592,7 @@ class OfficialService:
             if priority and g.priority.lower() != priority.lower():
                 continue
             if department_id:
-                dept_target = f"{g.assigned_department or ''} {g.predicted_department or ''}".lower()
+                effective_dept = (g.assigned_department or g.predicted_department or "").lower()
                 dept_query = department_id.lower()
                 is_kwa = "kwa" in dept_query or "water" in dept_query
                 is_pwd = "pwd" in dept_query or "works" in dept_query or "road" in dept_query
@@ -580,12 +600,12 @@ class OfficialService:
                 is_lsgd = "lsgd" in dept_query or "panchayat" in dept_query or "municipality" in dept_query
                 is_rev = "revenue" in dept_query or "admin" in dept_query
 
-                match = (dept_query in dept_target) or \
-                        (is_kwa and ("kwa" in dept_target or "water" in dept_target)) or \
-                        (is_pwd and ("pwd" in dept_target or "road" in dept_target or "works" in dept_target)) or \
-                        (is_kseb and ("kseb" in dept_target or "power" in dept_target or "electricity" in dept_target)) or \
-                        (is_lsgd and ("lsgd" in dept_target or "panchayat" in dept_target)) or \
-                        (is_rev and ("revenue" in dept_target or "admin" in dept_target))
+                match = (dept_query in effective_dept) or \
+                        (is_kwa and ("kwa" in effective_dept or "water" in effective_dept)) or \
+                        (is_pwd and ("pwd" in effective_dept or "road" in effective_dept or "works" in effective_dept)) or \
+                        (is_kseb and ("kseb" in effective_dept or "power" in effective_dept or "electricity" in effective_dept)) or \
+                        (is_lsgd and ("lsgd" in effective_dept or "panchayat" in effective_dept)) or \
+                        (is_rev and ("revenue" in effective_dept or "admin" in effective_dept))
 
                 if not match:
                     continue
@@ -633,7 +653,10 @@ class OfficialService:
 
         workloads = []
         for d in depts:
-            dept_g = [g for g in all_grievances if g.assigned_department == d or g.predicted_department == d]
+            dept_g = [
+                g for g in all_grievances
+                if (g.assigned_department == d) or (not g.assigned_department and g.predicted_department == d)
+            ]
             pending = sum(1 for g in dept_g if g.status in ("draft", "intake_received", "under_analysis"))
             under_proc = sum(1 for g in dept_g if g.status == "under_processing")
             clarification = sum(1 for g in dept_g if g.status == "clarification_required")

@@ -77,6 +77,27 @@ async def init_db_schema():
                 WHERE t.rnum > 1
             );
             """,
+            """
+            UPDATE grievances
+            SET department_id = 'Public Works Department (PWD)',
+                category = 'Roads & Public Infrastructure'
+            WHERE (grievance_number = 'JM-2026-07393063' OR original_text ILIKE '%റോഡ്%' OR title ILIKE '%റോഡ്%')
+              AND (department_id IS NULL OR department_id = 'Kerala Water Authority (KWA)');
+            """,
+            """
+            UPDATE grievance_analyses
+            SET predicted_category = 'Public Works Department (PWD)'
+            WHERE grievance_id IN (
+                SELECT id FROM grievances 
+                WHERE grievance_number = 'JM-2026-07393063' 
+                   OR (original_text ILIKE '%റോഡ്%' AND (department_id = 'Public Works Department (PWD)' OR department_id IS NULL))
+            );
+            """,
+            """
+            UPDATE grievances
+            SET assigned_official_id = (SELECT id FROM users WHERE email = 'official.pwd@janmitra.gov.in' LIMIT 1)
+            WHERE department_id = 'Public Works Department (PWD)';
+            """,
         ]:
             try:
                 await conn.execute(text(stmt))
