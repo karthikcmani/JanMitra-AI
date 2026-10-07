@@ -320,10 +320,10 @@ class GrievanceService:
             return NormalizedExtractionResult(
                 source_type=attachment.attachment_type,
                 source_attachment_id=attachment.id,
-                original_language=attachment.original_language or "ml",
+                original_language=getattr(grievance, "original_language", "ml") or "ml",
                 extracted_text=attachment.raw_extracted_text,
                 extraction_status=attachment.extraction_status,
-                confidence_score=attachment.confidence_score,
+                confidence_score=attachment.extraction_confidence,
                 engine_name=attachment.extraction_engine or "cached_engine",
                 processed_at=attachment.extracted_at or datetime.now(timezone.utc),
                 error_message=attachment.extraction_error,
