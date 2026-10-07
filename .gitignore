@@ -68,3 +68,15 @@ backend/.env
 
 # Binaries
 cloudflared.exe
+
+# Presentations & Slide Generation Artifacts
+*.pptx
+assets/showcase/
+backend/build_showcase_screenshots.py
+backend/generate_*.py
+build_full_janmitra_deck.py
+create_exact_janmitra_presentation.py
+generate_janmitra_presentation.py
+inspect_*.py
+janmitra_git_history.png
+assets/images/git_history_screenshot.png
