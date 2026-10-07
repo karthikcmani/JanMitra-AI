@@ -146,7 +146,22 @@ class GrievanceIntakeNotifier extends StateNotifier<GrievanceIntakeState> {
         attachmentType: isVoice ? 'voice_recording' : 'handwritten_petition',
       );
 
-      // Step 3: Trigger Extraction Engine
+      // Fast-path: If attachment was extracted during upload, complete immediately
+      if (attachment.extractionStatus == 'completed' &&
+          attachment.rawExtractedText != null &&
+          attachment.rawExtractedText!.isNotEmpty) {
+        state = state.copyWith(
+          grievance: draft,
+          attachment: attachment,
+          rawExtractedText: attachment.rawExtractedText,
+          verifiedText: attachment.rawExtractedText!,
+          extractionStep: IntakeExtractionStep.completed,
+          isLoading: false,
+        );
+        return;
+      }
+
+      // Step 3: Trigger Extraction Engine if not already completed
       state = state.copyWith(
         grievance: draft,
         attachment: attachment,

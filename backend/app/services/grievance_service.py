@@ -52,7 +52,7 @@ class GrievanceService:
         from app.services.priority_engine import PriorityIntelligenceEngine
         p_eval = PriorityIntelligenceEngine.evaluate(
             (draft_in.title or "") + " " + (draft_in.description or "") + " " + (draft_in.original_text or ""),
-            department=draft_in.category,
+            department=getattr(draft_in, "category", None) or getattr(draft_in, "department", None),
         )
         db_grievance.priority = p_eval.priority.lower()
         db_grievance.priority_score = p_eval.priority_score
@@ -180,8 +180,7 @@ class GrievanceService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to record attachment metadata in database.",
             )
-
-        # 7. Automatically execute fast document OCR extraction with 5s timeout safeguard
+        # 7. Automatically execute fast document OCR extraction with 8s timeout safeguard
         try:
             import asyncio
             await asyncio.wait_for(
@@ -190,7 +189,7 @@ class GrievanceService:
                     grievance_id=grievance_id,
                     attachment_id=attachment.id,
                 ),
-                timeout=5.0,
+                timeout=8.0,
             )
             refreshed = await self.repo.get_attachment_for_grievance(
                 grievance_id=grievance_id, attachment_id=attachment.id
@@ -312,7 +311,25 @@ class GrievanceService:
                 detail="Attachment not found.",
             )
 
-        # 3. Perform extraction via abstraction adapter
+        # 3. If already extracted, return cached result immediately
+        if (
+            extractor is None
+            and attachment.extraction_status in (ExtractionStatus.COMPLETED, ExtractionStatus.NEEDS_VERIFICATION)
+            and (attachment.raw_extracted_text or attachment.extraction_error)
+        ):
+            return NormalizedExtractionResult(
+                source_type=attachment.attachment_type,
+                source_attachment_id=attachment.id,
+                original_language=attachment.original_language or "ml",
+                extracted_text=attachment.raw_extracted_text,
+                extraction_status=attachment.extraction_status,
+                confidence_score=attachment.confidence_score,
+                engine_name=attachment.extraction_engine or "cached_engine",
+                processed_at=attachment.extracted_at or datetime.now(timezone.utc),
+                error_message=attachment.extraction_error,
+            )
+
+        # 4. Perform extraction via abstraction adapter
         try:
             abs_path = self.storage.get_absolute_path(attachment.storage_path)
             result = await extractor_adapter.extract_content(

@@ -405,7 +405,7 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
                     child: Text(
                       state.extractionStep == IntakeExtractionStep.uploading
                           ? 'Uploading original petition artifact to server...'
-                          : 'Processing OCR extraction via Google Cloud Vision API (DOCUMENT_TEXT_DETECTION)...',
+                          : 'AI Multimodal Intelligence: Transcribing Malayalam handwritten petition...',
                       style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
                     ),
                   ),

@@ -12,6 +12,8 @@ class GrievanceDraftCreate(BaseModel):
     original_text: Optional[str] = None
     translated_text: Optional[str] = None
     priority: str = Field("medium", max_length=20)
+    category: Optional[str] = None
+    department: Optional[str] = None
     confirmed_location: Optional[Dict[str, Any]] = None
     location_sources: Optional[Dict[str, Any]] = None
 
