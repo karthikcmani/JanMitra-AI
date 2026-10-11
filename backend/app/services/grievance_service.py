@@ -180,24 +180,6 @@ class GrievanceService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to record attachment metadata in database.",
             )
-        # 7. Automatically execute fast document OCR extraction with 8s timeout safeguard
-        try:
-            import asyncio
-            await asyncio.wait_for(
-                self.extract_attachment_content(
-                    citizen_id=citizen_id,
-                    grievance_id=grievance_id,
-                    attachment_id=attachment.id,
-                ),
-                timeout=8.0,
-            )
-            refreshed = await self.repo.get_attachment_for_grievance(
-                grievance_id=grievance_id, attachment_id=attachment.id
-            )
-            if refreshed:
-                attachment = refreshed
-        except Exception:
-            pass  # Do not block upload response if OCR is slow or rate-limited
 
         return GrievanceAttachmentResponse.model_validate(attachment)
 

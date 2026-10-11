@@ -637,11 +637,11 @@ class GeminiVisionOCRAdapter(BaseExtractionAdapter):
             else:
                 try:
                     img = Image.open(file_path).convert("RGB")
-                    # Downsample to max 1280px to reduce payload and speed up inference to ~6s
-                    if max(img.size) > 1280:
-                        img.thumbnail((1280, 1280))
+                    # Downsample to max 1024px to reduce payload and speed up inference to ~2-3s
+                    if max(img.size) > 1024:
+                        img.thumbnail((1024, 1024))
                     buf = BytesIO()
-                    img.save(buf, format="JPEG", quality=85)
+                    img.save(buf, format="JPEG", quality=80)
                     encoded_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
                     mime_type = "image/jpeg"
                 except Exception:
@@ -668,13 +668,13 @@ class GeminiVisionOCRAdapter(BaseExtractionAdapter):
 
             # Production-verified active vision models ordered by speed and accuracy
             models_to_try = [
+                "gemini-3.5-flash-lite",
                 "gemini-3.1-flash-lite",
-                "gemini-3.8-flash",
-                "gemini-3.7-flash",
+                "gemini-3.6-flash",
                 "gemini-flash-lite-latest",
             ]
 
-            async with httpx.AsyncClient(timeout=25.0) as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 for model_name in models_to_try:
                     try:
                         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
@@ -720,7 +720,7 @@ class GeminiVisionOCRAdapter(BaseExtractionAdapter):
             mime_type = attachment.mime_type or ("application/pdf" if file_path.suffix.lower() == ".pdf" else "image/jpeg")
             sdk_part = types.Part.from_bytes(data=file_path.read_bytes(), mime_type=mime_type)
 
-            for model_name in ["gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3.7-flash"]:
+            for model_name in ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash"]:
                 try:
                     response = await asyncio.to_thread(
                         client.models.generate_content,
@@ -748,7 +748,7 @@ class GeminiVisionOCRAdapter(BaseExtractionAdapter):
                 from PIL import Image
 
                 legacy_genai.configure(api_key=api_key.strip())
-                for model_name in ["gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3.7-flash"]:
+                for model_name in ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash"]:
                     try:
                         model = legacy_genai.GenerativeModel(model_name)
                         img = Image.open(file_path)
@@ -1067,8 +1067,14 @@ class FastAutoExtractionAdapter(BaseExtractionAdapter):
             if oai_res.extraction_status == ExtractionStatus.COMPLETED and oai_res.extracted_text:
                 return oai_res
 
-        # 7. Local EasyOCR (Strictly timeout-guarded)
-        if easyocr is not None:
+        # 7. Local EasyOCR (Strictly timeout-guarded and bypassed on cloud to avoid CPU locks)
+        should_run_easyocr = (
+            easyocr is not None
+            and not os.getenv("RENDER")
+            and not os.getenv("DISABLE_LOCAL_EASYOCR")
+            and os.getenv("ENVIRONMENT") != "production"
+        )
+        if should_run_easyocr:
             eo = EasyOCRMalayalamAdapter()
             res = await eo.extract_content(attachment, file_path)
             if res.extraction_status == ExtractionStatus.COMPLETED and res.extracted_text:

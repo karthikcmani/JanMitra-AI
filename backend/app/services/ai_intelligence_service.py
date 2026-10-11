@@ -43,7 +43,7 @@ class AIIntelligenceService:
             or os.getenv("GOOGLE_API_KEY")
             or getattr(settings, "GEMINI_API_KEY", None)
         )
-        self.model = "gemini-3.6-flash"
+        self.model = "gemini-3.5-flash-lite"
 
     async def analyze_grievance_intelligence(self, grievance_id: str) -> Optional[Dict[str, Any]]:
         # 1. Fetch Grievance
@@ -158,9 +158,9 @@ Respond ONLY with a valid JSON object matching this exact schema:
         }
 
         models_to_try = [
+            "gemini-3.5-flash-lite",
             "gemini-3.1-flash-lite",
-            "gemini-3.8-flash",
-            "gemini-3.7-flash",
+            "gemini-3.6-flash",
             "gemini-flash-lite-latest",
         ]
 
