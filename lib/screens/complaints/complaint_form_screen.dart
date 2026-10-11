@@ -1,7 +1,10 @@
+import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../providers/grievance_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/constants.dart';
@@ -28,6 +31,73 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
     _directTextController.dispose();
     _verifiedTextController.dispose();
     super.dispose();
+  }
+
+  Future<void> _captureFromCamera() async {
+    try {
+      final picker = ImagePicker();
+      final photo = await picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 92,
+        maxWidth: 2048,
+        maxHeight: 2048,
+        preferredCameraDevice: CameraDevice.rear,
+      );
+
+      if (photo != null) {
+        final bytes = await photo.length();
+        final fileName = photo.name.isNotEmpty
+            ? photo.name
+            : 'camera_petition_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        ref.read(grievanceIntakeProvider.notifier).setPickedFile(
+              photo.path,
+              fileName,
+              bytes,
+            );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Camera error: ${e.toString()}'),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickFromGallery() async {
+    try {
+      final picker = ImagePicker();
+      final image = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 92,
+        maxWidth: 2048,
+        maxHeight: 2048,
+      );
+
+      if (image != null) {
+        final bytes = await image.length();
+        final fileName = image.name.isNotEmpty
+            ? image.name
+            : 'gallery_petition_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        ref.read(grievanceIntakeProvider.notifier).setPickedFile(
+              image.path,
+              fileName,
+              bytes,
+            );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gallery error: ${e.toString()}'),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _pickDocument({bool isAudio = false}) async {
@@ -185,9 +255,9 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
                     children: [
                       Expanded(
                         child: _buildModeCard(
-                          title: 'Handwritten Petition',
-                          subtitle: 'Malayalam Image / PDF OCR',
-                          icon: Icons.document_scanner_rounded,
+                          title: 'Photo / Camera',
+                          subtitle: 'Camera / Gallery / OCR',
+                          icon: Icons.camera_alt_rounded,
                           modeKey: 'ocr_handwritten',
                           activeMode: state.intakeMode,
                           isDark: isDark,
@@ -318,64 +388,202 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
   }
 
   Widget _buildHandwrittenIntakeSection(GrievanceIntakeState state, bool isDark) {
+    final hasFile = state.selectedFileName != null && state.selectedFilePath != null;
+    final isImage = hasFile && !state.selectedFileName!.toLowerCase().endsWith('.pdf');
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // File Selection Box
+        // Intake Source Card (Direct Camera / Gallery / PDF)
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             color: isDark ? AppTheme.darkCard : Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: hasFile
+                  ? AppTheme.primaryBlue.withValues(alpha: 0.4)
+                  : (isDark ? Colors.grey.shade800 : Colors.grey.shade300),
+              width: hasFile ? 1.5 : 1.0,
+            ),
+            boxShadow: [
+              if (hasFile)
+                BoxShadow(
+                  color: AppTheme.primaryBlue.withValues(alpha: 0.06),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+            ],
           ),
           child: Column(
             children: [
-              const Icon(Icons.cloud_upload_outlined, size: 40, color: AppTheme.primaryBlue),
-              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryBlue.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.camera_alt_rounded,
+                  size: 32,
+                  color: AppTheme.primaryBlue,
+                ),
+              ),
+              const SizedBox(height: 10),
               const Text(
-                'Upload Malayalam Handwritten Petition',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                'Handwritten Petition Photo Intake',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
               const SizedBox(height: 4),
               const Text(
-                'Supported formats: JPG, PNG, WEBP, PDF (Max 10MB)',
+                'Snap a direct photo of the petition or choose from gallery / PDF',
+                textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 12, color: Colors.grey),
               ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: _pickDocument,
-                icon: const Icon(Icons.folder_open_rounded),
-                label: Text(
-                  state.selectedFileName ?? 'Browse / Select File',
-                ),
+              const SizedBox(height: 16),
+
+              // Action Buttons Row: Direct Camera vs Gallery vs PDF
+              Row(
+                children: [
+                  Expanded(
+                    flex: 5,
+                    child: ElevatedButton.icon(
+                      onPressed: _captureFromCamera,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryBlue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 1,
+                      ),
+                      icon: const Icon(Icons.photo_camera_rounded, size: 20),
+                      label: const Text(
+                        'Take Photo',
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 4,
+                    child: OutlinedButton.icon(
+                      onPressed: _pickFromGallery,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        side: BorderSide(color: AppTheme.primaryBlue.withValues(alpha: 0.6)),
+                      ),
+                      icon: const Icon(Icons.photo_library_rounded, size: 18),
+                      label: const Text(
+                        'Gallery',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 3,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _pickDocument(),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 6),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      icon: const Icon(Icons.picture_as_pdf_rounded, size: 18),
+                      label: const Text(
+                        'PDF',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ),
         const SizedBox(height: 16),
 
-        if (state.selectedFileName != null) ...[
-          // Original Artifact Metadata Card
-          Card(
-            elevation: 1,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            child: ListTile(
-              leading: Icon(
-                state.selectedFileName!.endsWith('.pdf')
-                    ? Icons.picture_as_pdf_rounded
-                    : Icons.image_rounded,
-                color: AppTheme.primaryBlue,
-                size: 32,
-              ),
-              title: Text(
-                state.selectedFileName!,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              ),
-              subtitle: Text(
-                'Original Citizen Source File • Untouched Original (${((state.selectedFileSizeBytes ?? 0) / 1024).toStringAsFixed(1)} KB)',
-                style: const TextStyle(fontSize: 11),
-              ),
+        if (hasFile) ...[
+          // Photo / Document Preview Card
+          Container(
+            decoration: BoxDecoration(
+              color: isDark ? AppTheme.darkCard : Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppTheme.borderLight),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (isImage && !kIsWeb && File(state.selectedFilePath!).existsSync()) ...[
+                  ClipRRect(
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                    child: Container(
+                      height: 220,
+                      width: double.infinity,
+                      color: Colors.black12,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Image.file(
+                            File(state.selectedFilePath!),
+                            fit: BoxFit.cover,
+                          ),
+                          Positioned(
+                            bottom: 8,
+                            right: 8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.65),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 14),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Ready for OCR',
+                                    style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                ListTile(
+                  leading: Icon(
+                    isImage ? Icons.image_rounded : Icons.picture_as_pdf_rounded,
+                    color: AppTheme.primaryBlue,
+                    size: 32,
+                  ),
+                  title: Text(
+                    state.selectedFileName!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  subtitle: Text(
+                    'Original Citizen Artifact • ${((state.selectedFileSizeBytes ?? 0) / 1024).toStringAsFixed(1)} KB',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  trailing: TextButton.icon(
+                    onPressed: _captureFromCamera,
+                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                    label: const Text('Retake', style: TextStyle(fontSize: 12)),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 16),
