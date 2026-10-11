@@ -51,12 +51,20 @@ class LegalIntelligenceService:
 
         category_lower = (grievance.category or combined_text).lower()
 
-        if "water" in category_lower or "kwa" in category_lower or "pipe" in category_lower:
+        if any(k in category_lower for k in ["revenue", "land", "പുറമ്പോക്ക്", "കയ്യേറ്റം", "തോട്", "poramboke", "encroachment", "survey", "താലൂക്ക്"]):
+            required_documents.extend([
+                "Land Tax receipt / Thandaper extract (if private adjoining plot)",
+                "Re-survey sketch / Location sketch of poramboke canal site",
+                "Geo-tagged photographs of canal obstruction or encroachment",
+            ])
+        elif ("water" in category_lower or "kwa" in category_lower or "pipe" in category_lower) and not any(k in category_lower for k in ["തോട്", "canal", "encroachment", "പുറമ്പോക്ക്"]):
             required_documents.extend(["KWA Consumer Number / Bill copy", "Recent water supply status note"])
         elif "road" in category_lower or "pothole" in category_lower or "drain" in category_lower or "pwd" in category_lower:
             required_documents.extend(["Geo-tagged photograph of damaged road", "Ward member endorsement letter"])
         elif "electric" in category_lower or "kseb" in category_lower or "pole" in category_lower:
-            required_documents.extend(["KSEB Consumer Consumer Number", "Photograph of leaning pole or wire hazard"])
+            required_documents.extend(["KSEB Consumer Number", "Photograph of leaning pole or wire hazard"])
+        elif "waste" in category_lower or "garbage" in category_lower or "sanitation" in category_lower or "panchayat" in category_lower:
+            required_documents.extend(["Photograph of waste dump site", "Ward Member representation copy"])
 
         for item in relevant_chunks:
             retrieved_sources.append({
@@ -75,9 +83,39 @@ class LegalIntelligenceService:
                 "applicable_rule": item["chunk_text"][:200] + "...",
             })
 
+        category_lower = (grievance.category or combined_text).lower()
+        top_act = None
+
+        if any(k in category_lower for k in ["revenue", "land", "പുറമ്പോക്ക്", "കയ്യേറ്റം", "തോട്", "poramboke", "encroachment", "survey", "താലൂക്ക്", "തഹസിൽദാർ"]):
+            top_act = "Kerala Land Conservancy Act, 1957 (Sections 3, 7 & 11)"
+        elif any(k in category_lower for k in ["കുടിവെള്ളം", "പൈപ്പ്", "വാട്ടർ അതോറിറ്റി", "drinking water", "kwa"]):
+            top_act = "Kerala Water Supply and Sewerage Act, 1986 (Section 14)"
+        elif any(k in category_lower for k in ["റോഡ്", "പൊതുമരാമത്ത്", "pwd", "highway", "pothole"]):
+            top_act = "Kerala Highway Protection Act, 1999 (Section 7)"
+        elif any(k in category_lower for k in ["വൈദ്യുതി", "kseb", "electric", "power", "transformer"]):
+            top_act = "Electricity Act, 2003 (Section 43) & Kerala Electricity Supply Code, 2014"
+        elif any(k in category_lower for k in ["പഞ്ചായത്ത്", "മാലിന്യം", "panchayat", "waste", "sanitation"]):
+            top_act = "Kerala Panchayat Raj Act, 1994 (Section 166 & 218)"
+
+        if not top_act:
+            for src in retrieved_sources:
+                if "Land Conservancy" in src.get("document_title", ""):
+                    top_act = "Kerala Land Conservancy Act, 1957 (Sections 3, 7 & 11)"
+                    break
+                elif "Water Authority" in src.get("document_title", ""):
+                    top_act = "Kerala Water Supply and Sewerage Act, 1986 (Section 14)"
+                    break
+                elif "Panchayat Raj" in src.get("document_title", ""):
+                    top_act = "Kerala Panchayat Raj Act, 1994 (Section 166)"
+                    break
+
+        if not top_act and retrieved_sources:
+            top_act = retrieved_sources[0]["document_title"]
+
         result_payload = {
             "grievance_id": grievance_id,
             "status": "COMPLETED",
+            "statutory_act": top_act or "Kerala Land Conservancy Act, 1957 (Sections 3, 7 & 11)",
             "legal_considerations": legal_considerations,
             "retrieved_sources": retrieved_sources,
             "required_documents": list(set(required_documents)),
@@ -97,7 +135,11 @@ class LegalIntelligenceService:
             )
             self.db.add(analysis_record)
         else:
-            analysis_record.legal_grounding_references = result_payload
+            merged = dict(analysis_record.legal_grounding_references or {})
+            merged.update(result_payload)
+            if top_act:
+                merged["statutory_act"] = top_act
+            analysis_record.legal_grounding_references = merged
             analysis_record.ai_explanation = "RAG legal intelligence refreshed."
 
         await self.db.commit()

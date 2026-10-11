@@ -141,6 +141,22 @@ Section 30: Powers of District Disaster Management Authority (DDMA) headed by Di
 3. Safety audits of public bridges and culverts prior to monsoon season.
 """,
     },
+    {
+        "title": "Kerala Land Conservancy Act, 1957 - Government Poramboke & Canal Encroachments",
+        "document_type": "ACT",
+        "department": "Revenue & General Administration",
+        "act_number_or_go_no": "Act 8 of 1958",
+        "content_summary": "Statutory powers of Tahsildar and Revenue officers for summary eviction of unauthorized occupants and protection of poramboke canals, streams, and water bodies.",
+        "full_text": """
+KERALA LAND CONSERVANCY ACT, 1957 (Act 8 of 1958)
+Section 3: Property of Government Defined.
+All public roads, streets, lanes and paths, the bridges, ditches, dikes and fences on or beside the same, the bed of the sea and of harbours and creeks, rivers, streams, nalas, lakes and tanks, canals and water courses, and all poramboke lands are declared to be the property of Government.
+Section 7: Summary Eviction of Unauthorized Occupants.
+Any person unauthorizedly occupying any land which is the property of Government (including poramboke canals, streams, thodu, or pathways) may be summarily evicted by the Tahsildar or authorized Revenue Officer.
+Section 11: Liability of unauthorized occupant to assessment and penalty.
+The Tahsildar may issue notice, cause survey and demarcation of the boundaries, dismantle unauthorized fences or earthen bunds, and restore natural water flow at the expense of the encroacher.
+""",
+    },
 ]
 
 
@@ -214,6 +230,23 @@ class KnowledgeBaseService:
             # Text keyword boost for exact law terms
             lower_chunk = chunk.chunk_text.lower()
             lower_query = query_text.lower()
+
+            if any(k in lower_chunk for k in ["poramboke", "puramboke", "encroach", "canal", "stream", "tahsildar", "water courses", "land conservancy"]):
+                if any(m in lower_query for m in ["പുറമ്പോക്ക്", "കയ്യേറ്റം", "തോട്", "തഹസിൽദാർ", "സർവേ", "നീരൊഴുക്ക്", "poramboke", "puramboke", "encroachment", "canal", "stream"]):
+                    sim = min(1.0, sim + 0.35)
+
+            if any(k in lower_chunk for k in ["pipeline", "burst", "drinking water", "water works", "supply"]):
+                if any(m in lower_query for m in ["കുടിവെള്ളം", "പൈപ്പ്", "വാട്ടർ അതോറിറ്റി", "drinking water", "pipe"]):
+                    sim = min(1.0, sim + 0.35)
+
+            if any(k in lower_chunk for k in ["electricity", "power", "pole", "wire", "voltage", "transformer"]):
+                if any(m in lower_query for m in ["വൈദ്യുതി", "പോസ്റ്റ്", "കമ്പി", "കെ.എസ്.ഇ.ബി", "electric"]):
+                    sim = min(1.0, sim + 0.35)
+
+            if any(k in lower_chunk for k in ["road", "highway", "pothole", "bridge", "culvert"]):
+                if any(m in lower_query for m in ["റോഡ്", "കുഴി", "പാലം", "കലുങ്ക്", "പൊതുമരാമത്ത്", "road"]):
+                    sim = min(1.0, sim + 0.35)
+
             if any(k in lower_chunk for k in ["water", "pipe", "road", "drain", "electric", "pole", "waste", "panchayat", "municipality"] if k in lower_query):
                 sim = min(1.0, sim + 0.15)
 

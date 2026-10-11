@@ -98,6 +98,59 @@ async def init_db_schema():
             SET assigned_official_id = (SELECT id FROM users WHERE email = 'official.pwd@janmitra.gov.in' LIMIT 1)
             WHERE department_id = 'Public Works Department (PWD)';
             """,
+            """
+            UPDATE grievances
+            SET department_id = 'Revenue & General Administration',
+                category = 'Revenue & Land Reforms'
+            WHERE (
+                original_text ILIKE '%പുറമ്പോക്ക്%' 
+                OR original_text ILIKE '%കയ്യേറ്റം%'
+                OR original_text ILIKE '%തോട്%'
+                OR original_text ILIKE '%തഹസിൽദാർ%'
+                OR original_text ILIKE '%റീ-സർവേ%'
+                OR title ILIKE '%തോട്%'
+                OR title ILIKE '%പുറമ്പോക്ക്%'
+                OR grievance_number = 'JM-2026-30098521'
+            )
+            AND (
+                department_id = 'Kerala Water Authority (KWA)'
+                OR category = 'Water Supply & Drainage'
+                OR department_id IS NULL
+            );
+            """,
+            """
+            UPDATE grievance_analyses
+            SET predicted_category = 'Revenue & General Administration'
+            WHERE grievance_id IN (
+                SELECT id FROM grievances 
+                WHERE (
+                    original_text ILIKE '%പുറമ്പോക്ക്%' 
+                    OR original_text ILIKE '%കയ്യേറ്റം%'
+                    OR original_text ILIKE '%തോട്%'
+                    OR original_text ILIKE '%തഹസിൽദാർ%'
+                    OR title ILIKE '%തോട്%'
+                    OR title ILIKE '%പുറമ്പോക്ക്%'
+                    OR grievance_number = 'JM-2026-30098521'
+                )
+            );
+            """,
+            """
+            UPDATE jurisdiction_recommendations
+            SET department_name = 'Revenue & General Administration',
+                recommended_authority = 'Tahsildar / Village Officer, Revenue Department'
+            WHERE grievance_id IN (
+                SELECT id FROM grievances 
+                WHERE (
+                    original_text ILIKE '%പുറമ്പോക്ക്%' 
+                    OR original_text ILIKE '%കയ്യേറ്റം%'
+                    OR original_text ILIKE '%തോട്%'
+                    OR original_text ILIKE '%തഹസിൽദാർ%'
+                    OR title ILIKE '%തോട്%'
+                    OR title ILIKE '%പുറമ്പോക്ക്%'
+                    OR grievance_number = 'JM-2026-30098521'
+                )
+            );
+            """,
         ]:
             try:
                 await conn.execute(text(stmt))

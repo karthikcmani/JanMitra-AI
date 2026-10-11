@@ -49,6 +49,13 @@ async def on_startup():
     try:
         await init_db_schema()
         logging.getLogger(__name__).info("Database schema initialized successfully on startup.")
+
+        from app.database.session import AsyncSessionLocal
+        from app.services.knowledge_service import KnowledgeBaseService
+        async with AsyncSessionLocal() as db:
+            kb_service = KnowledgeBaseService(db)
+            await kb_service.seed_default_knowledge_base()
+        logging.getLogger(__name__).info("Legal knowledge base verified and seeded.")
     except Exception as e:
         logging.getLogger(__name__).error(f"Database schema initialization warning on startup: {e}")
 

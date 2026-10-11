@@ -92,9 +92,15 @@ class AIIntelligenceService:
 You are an expert Administrative Intelligence AI assistant for JanMitra AI (Public Grievance Platform).
 Analyze the following citizen grievance petition and return a structured JSON response.
 
-STRICT INSTRUCTIONS:
+STRICT INSTRUCTIONS & JURISDICTION RULES:
 - Use ONLY facts contained in the supplied grievance text.
 - Do NOT invent facts, locations, dates, authorities, or statutory acts.
+- Categorize accurately according to Kerala government departmental jurisdictions:
+  * If concerning land poramboke, canal/thodu encroachment, survey, resurvey, or addressed to Tahsildar/Taluk/Village office: category MUST be "Revenue & Land" (under Kerala Land Conservancy Act, 1957). Never assign to Kerala Water Authority!
+  * If concerning piped drinking water, pipeline bursts/leaks: category is "Water Supply & Drainage".
+  * If concerning roads, potholes, bridges, culverts: category is "Roads & Public Infrastructure".
+  * If concerning electricity, wires, poles, transformers: category is "Power & Electricity".
+  * If concerning local ward garbage, streetlights, municipal drainage gutters: category is "Local Body & Sanitation".
 - Identify if multiple independent actionable issues exist in the text.
 - For each issue, evaluate severity (LOW, MEDIUM, HIGH, CRITICAL) and priority (LOW, MEDIUM, HIGH, CRITICAL).
 - Extract structured facts (location, date, duration, affected_service, impact, people_affected, safety_hazard).
@@ -152,16 +158,17 @@ Respond ONLY with a valid JSON object matching this exact schema:
         }
 
         models_to_try = [
-            "gemini-3.6-flash",
-            "gemini-3.5-flash",
-            "gemini-flash-latest",
+            "gemini-3.1-flash-lite",
+            "gemini-3.8-flash",
+            "gemini-3.7-flash",
+            "gemini-flash-lite-latest",
         ]
 
         llm_response_data = None
         used_model = None
 
         try:
-            async with httpx.AsyncClient(timeout=4.0) as client:
+            async with httpx.AsyncClient(timeout=12.0) as client:
                 for model_name in models_to_try:
                     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
                     resp = await client.post(url, json=payload, headers=headers)
@@ -176,7 +183,7 @@ Respond ONLY with a valid JSON object matching this exact schema:
                                 break
                     elif resp.status_code == 429:
                         logger.warning(
-                            f"Model {model_name} HTTP 429 quota exhausted. Fast-failing to heuristic analyzer."
+                            f"Model {model_name} HTTP 429 quota exhausted. Fast-failing to sequential analyzer."
                         )
                         break
                     else:
@@ -185,22 +192,19 @@ Respond ONLY with a valid JSON object matching this exact schema:
             logger.warning(f"AI Intelligence LLM call exception: {str(e)}")
 
         if not llm_response_data:
-            # Rule-based Heuristic Fallback Analysis (Fast & Zero API Key cost)
-            logger.info("Using Rule-based Heuristic Analyzer fallback for Grievance Intelligence.")
-            used_model = "heuristic_rule_analyzer_v1"
+            # Sequential Contextual State Machine Fallback (Zero API Key cost & High Accuracy)
+            logger.info("Using SequentialRoutingEngine fallback for Grievance Intelligence.")
+            used_model = "sequential_routing_engine_v2"
             clean_text = combined_text.strip()
             summary_text = clean_text[:200] + ("..." if len(clean_text) > 200 else "")
 
-            # Heuristic category & issue mapping
-            cat = "General Administration"
-            if any(k in clean_text.lower() for k in ["water", "pipe", "leak", "kwa"]):
-                cat = "Water Supply & Drainage"
-            elif any(k in clean_text.lower() for k in ["road", "pothole", "bridge", "culvert", "pwd"]):
-                cat = "Roads & Public Infrastructure"
-            elif any(k in clean_text.lower() for k in ["electric", "power", "pole", "transformer", "kseb"]):
-                cat = "Power & Electricity"
-            elif any(k in clean_text.lower() for k in ["garbage", "waste", "sanitation", "drain"]):
-                cat = "Local Body & Sanitation"
+            from app.services.sequential_routing_engine import SequentialRoutingEngine
+            decision = SequentialRoutingEngine.evaluate(
+                clean_text,
+                location=grievance.confirmed_location or {}
+            )
+            cat = decision.category
+            dept_name = decision.department_name
 
             questions_list = []
             if "ward" not in clean_text.lower() and "house" not in clean_text.lower():
@@ -217,10 +221,10 @@ Respond ONLY with a valid JSON object matching this exact schema:
                 })
 
             llm_response_data = {
-                "summary": f"Reported grievance regarding {cat.lower()}: {summary_text}",
+                "summary": f"Reported grievance regarding {cat}: {summary_text}",
                 "language": grievance.original_language or "ml",
-                "overall_severity": "HIGH" if "urgent" in clean_text.lower() or "severe" in clean_text.lower() else "MEDIUM",
-                "overall_priority": "high" if "urgent" in clean_text.lower() or "severe" in clean_text.lower() else "medium",
+                "overall_severity": "HIGH" if any(k in clean_text.lower() for k in ["urgent", "severe", "അടിയന്തര", "അപകട"]) else "MEDIUM",
+                "overall_priority": "high" if any(k in clean_text.lower() for k in ["urgent", "severe", "അടിയന്തര", "അപകട"]) else "medium",
                 "issues": [
                     {
                         "issue_number": 1,
@@ -228,11 +232,12 @@ Respond ONLY with a valid JSON object matching this exact schema:
                         "description": summary_text,
                         "category": cat,
                         "subcategory": "General",
-                        "severity": "MEDIUM",
-                        "priority": "MEDIUM",
+                        "severity": "HIGH" if "കയ്യേറ്റം" in clean_text else "MEDIUM",
+                        "priority": "HIGH" if "കയ്യേറ്റം" in clean_text else "MEDIUM",
                         "extracted_facts": {
                             "location": (grievance.confirmed_location or {}).get("ward", "Reported Ward"),
                             "affected_service": cat,
+                            "statutory_act": decision.statutory_act,
                         },
                         "missing_facts": ["exact_house_number_or_landmark"] if questions_list else [],
                         "interview_required": len(questions_list) > 0,

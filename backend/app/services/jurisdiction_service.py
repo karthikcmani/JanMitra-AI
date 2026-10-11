@@ -63,24 +63,24 @@ class JurisdictionIntelligenceService:
         ocr_texts = [att.raw_extracted_text for att in grievance.attachments if att.raw_extracted_text]
         combined_text = " ".join(
             filter(None, [grievance.title, grievance.description, grievance.original_text, grievance.category] + ocr_texts)
-        ).lower()
+        )
 
-        matched_dept = "Local Self Government Department (LSGD)"
-        matched_auth = f"{local_body} Secretary & Ward Officer, Ward #{ward}"
-        matched_level = "LOCAL_BODY"
-        confidence = 0.88
+        from app.services.sequential_routing_engine import SequentialRoutingEngine
 
-        for rule in AUTHORITY_MAPPINGS:
-            if any(k in combined_text for k in rule["keywords"]):
-                matched_dept = rule["department"]
-                matched_auth = f"{rule['authority']} ({district} District - {local_body})"
-                matched_level = rule["level"]
-                confidence = 0.94
-                break
+        decision = SequentialRoutingEngine.evaluate(
+            combined_text,
+            location={"district": district, "panchayat": local_body, "ward": ward},
+        )
+
+        matched_dept = decision.department_name
+        matched_auth = decision.recommended_authority
+        matched_level = decision.jurisdiction_level
+        confidence = decision.confidence_score
 
         reasoning = (
             f"Authority derived based on verified location '{local_body}, Ward #{ward}, {district}' "
-            f"and issue subject analysis. Recommended primary administrative office: {matched_dept}."
+            f"and sequential linguistic petition analysis under {decision.statutory_act}. "
+            f"Recommended primary administrative office: {matched_dept}. Rationale: {decision.legal_explanation}"
         )
 
         # Persist or update JurisdictionRecommendation
@@ -108,9 +108,9 @@ class JurisdictionIntelligenceService:
             rec.reasoning = reasoning
             rec.confidence_score = confidence
 
-        # Assign department_id on grievance if not set
-        if not grievance.department_id:
-            grievance.department_id = matched_dept
+        # Assign department_id on grievance
+        grievance.department_id = matched_dept
+        grievance.category = decision.category
 
         await self.db.commit()
 

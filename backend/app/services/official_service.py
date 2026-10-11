@@ -112,6 +112,21 @@ class OfficialActionRequest(BaseModel):
 class OfficialService:
     DEPARTMENT_RULES = [
         {
+            "code": "REV",
+            "name": "Revenue & General Administration",
+            "category": "Revenue & Land Reforms",
+            "keywords": [
+                "തഹസിൽദാർ", "താലൂക്ക്", "വില്ലേജ്", "പുറമ്പോക്ക്", "സർക്കാർ പുറമ്പോക്ക്",
+                "കയ്യേറ്റം", "കയ്യേറ്റം ഒഴിപ്പിച്ച്", "കയ്യേറി", "തോട്", "തോടിലെ", "തോട്ടിലെ",
+                "സ്വാഭാവിക നീരൊഴുക്ക്", "അളന്നു തിട്ടപ്പെടുത്തി", "അളന്നു", "റീ-സർവേ",
+                "സർവേ നമ്പർ", "റീ സർവെ", "പട്ടയം", "ഭൂമി", "നിലം നികത്തൽ", "തണ്ണീർത്തടം",
+                "മണ്ണ് നികത്തൽ", "വേലി കെട്ടി", "റവന്യൂ ഉദ്യോഗസ്ഥർ", "റവന്യൂ വകുപ്പ്",
+                "poramboke", "puramboke", "encroachment", "resurvey", "tahsildar", "taluk", "survey"
+            ],
+            "statutory_reference": "Kerala Land Conservancy Act, 1957 (Sections 3, 7 & 11)",
+            "legal_explanation": "Complaint pertains to government poramboke land, canal encroachment, or survey demarcation under Tahsildar / Revenue jurisdiction.",
+        },
+        {
             "code": "PWD",
             "name": "Public Works Department (PWD)",
             "category": "Roads & Public Infrastructure",
@@ -128,8 +143,9 @@ class OfficialService:
             "name": "Kerala Water Authority (KWA)",
             "category": "Water Supply & Drainage",
             "keywords": [
-                "കുടിവെള്ളം", "കുടിവെള്ള", "പൈപ്പ്", "വെള്ളം", "ചോർച്ച", "പൊട്ടി", "പൈപ്പ് ലൈൻ",
-                "ജല അതോറിറ്റി", "വാട്ടർ അതോറിറ്റി", "water", "pipe", "leak", "leakage", "kwa", "drainage"
+                "കുടിവെള്ളം", "കുടിവെള്ള വിതരണം", "പൈപ്പ്", "പൈപ്പ് ലൈൻ", "പൈപ്പ് പൊട്ടി",
+                "കുടിവെള്ള പൈപ്പ്", "ചോർച്ച", "വാട്ടർ മീറ്റർ", "ടാപ്പ്", "വാട്ടർ കണക്ഷൻ",
+                "ജല അതോറിറ്റി", "വാട്ടർ അതോറിറ്റി", "drinking water", "pipe burst", "pipe leak", "kwa"
             ],
             "statutory_reference": "Kerala Water Supply and Sewerage Act, 1986 (Section 14)",
             "legal_explanation": "Complaint relates to public drinking water supply interruption or pipe damage under KWA jurisdiction.",
@@ -164,40 +180,16 @@ class OfficialService:
         self.repo = GrievanceRepository(db)
 
     def analyze_department_routing(self, text: str) -> DepartmentRoutingInfo:
-        text_lower = (text or "").lower()
-        best_match = None
-        highest_score = 0
-        matched_kw = []
-
-        for rule in self.DEPARTMENT_RULES:
-            matches = [kw for kw in rule["keywords"] if kw.lower() in text_lower]
-            score = len(matches)
-            if score > highest_score:
-                highest_score = score
-                best_match = rule
-                matched_kw = matches
-
-        if best_match and highest_score > 0:
-            confidence = min(0.70 + (highest_score * 0.10), 0.98)
-            return DepartmentRoutingInfo(
-                department_code=best_match["code"],
-                department_name=best_match["name"],
-                category=best_match["category"],
-                confidence_score=confidence,
-                matched_keywords=matched_kw,
-                statutory_reference=best_match["statutory_reference"],
-                legal_explanation=best_match["legal_explanation"],
-            )
-
-        # Default fallback to Revenue & General Administration
+        from app.services.sequential_routing_engine import SequentialRoutingEngine
+        decision = SequentialRoutingEngine.evaluate(text)
         return DepartmentRoutingInfo(
-            department_code="REV",
-            department_name="Revenue & General Administration",
-            category="General Public Grievance",
-            confidence_score=0.75,
-            matched_keywords=[],
-            statutory_reference="Kerala Public Services Act, 2012 (Section 4)",
-            legal_explanation="Grievance received for administrative review and departmental routing assignment.",
+            department_code=decision.department_code,
+            department_name=decision.department_name,
+            category=decision.category,
+            confidence_score=decision.confidence_score,
+            matched_keywords=decision.sequential_trace,
+            statutory_reference=decision.statutory_act,
+            legal_explanation=decision.legal_explanation,
         )
 
     async def get_all_official_grievances(self) -> List[OfficialGrievanceDetailResponse]:
@@ -243,13 +235,25 @@ class OfficialService:
             )
             audit_logs = logs_res.scalars().all()
 
-            # Build Decision Support Panel
-            dept_suggestion = g.department_id or (analysis.predicted_category if (analysis and analysis.predicted_category) else "Revenue & General Administration")
+            from app.services.sequential_routing_engine import SequentialRoutingEngine
+            eval_text = (g.title or "") + " " + (g.description or "") + " " + (raw_ocr or g.original_text or "")
+            seq_dec = SequentialRoutingEngine.evaluate(eval_text)
+
+            dept_suggestion = g.department_id or (analysis.predicted_category if (analysis and analysis.predicted_category) else seq_dec.department_name)
             if not dept_suggestion or not str(dept_suggestion).strip():
-                dept_suggestion = "Revenue & General Administration"
-            statutory_info = analysis.legal_grounding_references.get("statutory_act", "Kerala Public Services Act, 2012") if (analysis and analysis.legal_grounding_references) else "Kerala Public Services Act, 2012"
-            explanation_text = analysis.ai_explanation if (analysis and analysis.ai_explanation) else "Assigned based on natural language petition context."
-            confidence_val = float(analysis.legal_grounding_references.get("confidence_score", 0.85)) if (analysis and analysis.legal_grounding_references) else 0.85
+                dept_suggestion = seq_dec.department_name
+
+            statutory_info = None
+            if analysis and analysis.legal_grounding_references:
+                statutory_info = analysis.legal_grounding_references.get("statutory_act")
+            if not statutory_info or statutory_info == "Kerala Public Services Act, 2012":
+                statutory_info = seq_dec.statutory_act
+
+            explanation_text = analysis.ai_explanation if (analysis and analysis.ai_explanation) else seq_dec.legal_explanation
+            if not explanation_text or explanation_text == "Assigned based on natural language petition context.":
+                explanation_text = seq_dec.legal_explanation
+
+            confidence_val = float(analysis.legal_grounding_references.get("confidence_score", seq_dec.confidence_score)) if (analysis and analysis.legal_grounding_references) else seq_dec.confidence_score
 
             missing_info = "None identified."
             if g.status == GrievanceStatus.CLARIFICATION_REQUIRED:

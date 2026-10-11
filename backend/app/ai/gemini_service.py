@@ -59,6 +59,39 @@ class GeminiGrievanceAnalyzer:
 You are an expert Administrative Intelligence AI assistant for JanMitra AI (Public Grievance Platform).
 Analyze the following citizen grievance petition (which may be written in Malayalam, English, or Manglish) and extract structured decision support information.
 
+STRICT KERALA GOVERNMENT JURISDICTION RULES:
+1. REVENUE & GENERAL ADMINISTRATION:
+   - If the petition is addressed to Tahsildar (തഹസിൽദാർ), Taluk Office (താലൂക്ക് ഓഫീസ്), Village Office (വില്ലേജ് ഓഫീസ്), or District Collector.
+   - If it involves government poramboke land (സർക്കാർ പുറമ്പോക്ക്), canal/stream encroachment (തോട് / കനാൽ കയ്യേറ്റം), resurvey (റീ-സർവേ), land demarcation (അളന്നു തിട്ടപ്പെടുത്തൽ), paddy/wetland filling (നെൽവയൽ നികത്തൽ), or pattayam.
+   - Statutory Act: "Kerala Land Conservancy Act, 1957 (Sections 3, 7 & 11)"
+   - Department: "Revenue & General Administration"
+   - Category: "Revenue & General Administration"
+   - NOTE: Poramboke canal encroachment or natural water flow obstruction is STRICTLY Revenue jurisdiction, NEVER Kerala Water Authority!
+
+2. KERALA WATER AUTHORITY (KWA):
+   - ONLY for piped drinking water supply (കുടിവെള്ള വിതരണം), water pipeline bursts or leaks (പൈപ്പ് പൊട്ടൽ / ചോർച്ച), water connections, or faulty water meters.
+   - Statutory Act: "Kerala Water Supply and Sewerage Act, 1986 (Section 14)"
+   - Department: "Kerala Water Authority (KWA)"
+   - Category: "Water Supply & Drainage"
+
+3. PUBLIC WORKS DEPARTMENT (PWD):
+   - For public roads, potholes (റോഡിലെ കുഴികൾ), bridges (പാലം), culverts (കലുങ്ക്), road tarring, and state highways.
+   - Statutory Act: "Kerala Highway Protection Act, 1999 (Section 7)"
+   - Department: "Public Works Department (PWD)"
+   - Category: "Roads & Public Infrastructure"
+
+4. KERALA STATE ELECTRICITY BOARD (KSEB):
+   - For electricity interruptions, electric poles (പോസ്റ്റ്), power lines (കമ്പി), transformers, or voltage issues.
+   - Statutory Act: "Electricity Act, 2003 (Section 43) & Kerala Electricity Supply Code, 2014"
+   - Department: "Kerala State Electricity Board (KSEB)"
+   - Category: "Power & Electricity"
+
+5. LOCAL SELF GOVERNMENT DEPARTMENT (LSGD / Panchayat / Municipality):
+   - For ward garbage/waste dumping (മാലിന്യം), street drainage gutters (ഓട), streetlights (തെരുവ് വിളക്ക്), public sanitation, or building permits.
+   - Statutory Act: "Kerala Panchayat Raj Act, 1994 (Section 166 & 218)"
+   - Department: "Local Self Government Department (LSGD / Panchayat)"
+   - Category: "Local Body & Public Health"
+
 PETITION TEXT:
 \"\"\"
 {grievance_text}
@@ -73,7 +106,7 @@ Respond ONLY with a valid JSON object matching this exact schema:
   "priority": "<high | medium | low>",
   "statutory_reference": "<Relevant Indian / Kerala Statutory Act & Section>",
   "reasoning": "<1-2 sentence administrative justification for department assignment>",
-  "confidence_score": <float between 0.50 and 0.99>
+  "confidence_score": <float between 0.80 and 0.99>
 }}
 """
 
@@ -97,13 +130,14 @@ Respond ONLY with a valid JSON object matching this exact schema:
         }
 
         models_to_try = [
-            "gemini-3.6-flash",
-            "gemini-3.5-flash",
-            "gemini-flash-latest",
+            "gemini-3.1-flash-lite",
+            "gemini-3.8-flash",
+            "gemini-3.7-flash",
+            "gemini-flash-lite-latest",
         ]
 
         try:
-            async with httpx.AsyncClient(timeout=4.0) as client:
+            async with httpx.AsyncClient(timeout=12.0) as client:
                 for model_name in models_to_try:
                     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
                     resp = await client.post(url, json=payload, headers=headers)
@@ -125,7 +159,7 @@ Respond ONLY with a valid JSON object matching this exact schema:
                         parsed = json.loads(raw_json_str)
 
                         return GeminiAnalysisResult(
-                            category=parsed.get("category", "General Public Grievance"),
+                            category=parsed.get("category", "Revenue & General Administration"),
                             department_name=parsed.get(
                                 "department_name", "Revenue & General Administration"
                             ),
@@ -139,20 +173,32 @@ Respond ONLY with a valid JSON object matching this exact schema:
                                 "reasoning",
                                 "Assigned based on natural language petition analysis.",
                             ),
-                            confidence_score=float(parsed.get("confidence_score", 0.85)),
+                            confidence_score=float(parsed.get("confidence_score", 0.92)),
                         )
                     elif resp.status_code == 429:
                         logger.warning(
-                            f"Gemini API model {model_name} quota exhausted (429). Fast-failing to heuristic fallback."
+                            f"Gemini API model {model_name} quota exhausted (429). Fast-failing to sequential engine fallback."
                         )
                         break
                     else:
                         logger.warning(
                             f"Gemini API model {model_name} returned non-200 status code {resp.status_code}: {resp.text[:200]}"
                         )
-                return None
         except Exception as e:
             logger.warning(
-                f"Gemini LLM analysis encountered non-fatal error: {str(e)}. Falling back safely."
+                f"Gemini LLM analysis encountered non-fatal error: {str(e)}. Using sequential engine fallback."
             )
-            return None
+
+        # Resilient fallback using SequentialRoutingEngine
+        from app.services.sequential_routing_engine import SequentialRoutingEngine
+        decision = SequentialRoutingEngine.evaluate(grievance_text)
+        return GeminiAnalysisResult(
+            category=decision.category,
+            department_name=decision.department_name,
+            summary=f"Grievance regarding {decision.category}: {grievance_text[:200]}...",
+            key_entities=[decision.detected_subject or decision.department_name],
+            priority="high" if any(k in grievance_text.lower() for k in ["അടിയന്തര", "urgent", "hazard", "danger"]) else "medium",
+            statutory_reference=decision.statutory_act,
+            reasoning=decision.legal_explanation,
+            confidence_score=decision.confidence_score,
+        )
