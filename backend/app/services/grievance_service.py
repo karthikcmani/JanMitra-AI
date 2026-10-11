@@ -469,6 +469,9 @@ class GrievanceService:
             juris_service = JurisdictionIntelligenceService(self.repo.db)
             await juris_service.recommend_jurisdiction(grievance.id)
 
+            # Automated decomposition into departmental sub-tickets if multi-issue detected
+            await self._decompose_and_create_sub_grievances(grievance, citizen_id)
+
             from app.services.notification_service import NotificationService
             notif_service = NotificationService(self.repo.db)
             await notif_service.create_notification(
@@ -485,5 +488,119 @@ class GrievanceService:
         self.repo.db.expire_all()
         updated = await self.repo.get_user_grievance(grievance_id, citizen_id)
         return GrievanceResponse.model_validate(updated)
+
+    async def _decompose_and_create_sub_grievances(self, grievance, citizen_id: str):
+        """Automatically decomposes multi-issue petitions into departmental sub-tickets."""
+        from app.models.grievance_model import (
+            Grievance,
+            GrievanceIssue,
+            GrievanceAuditLog,
+            GrievanceAnalysis,
+            GrievanceStatus,
+        )
+        from app.models.user_model import User
+        from app.services.sequential_routing_engine import SequentialRoutingEngine
+        from sqlalchemy import select
+        import uuid
+
+        # Check existing sub-grievances to avoid duplicates
+        subs_res = await self.repo.db.execute(
+            select(Grievance).where(Grievance.parent_id == grievance.id)
+        )
+        if subs_res.scalars().all():
+            return
+
+        issues_res = await self.repo.db.execute(
+            select(GrievanceIssue)
+            .where(GrievanceIssue.grievance_id == grievance.id)
+            .order_by(GrievanceIssue.issue_number.asc())
+        )
+        issues = issues_res.scalars().all()
+        if len(issues) < 2:
+            return
+
+        router = SequentialRoutingEngine()
+        off_res = await self.repo.db.execute(
+            select(User).where(User.role == "official", User.is_active == True)
+        )
+        officials = off_res.scalars().all()
+
+        created_children = []
+        for idx, issue in enumerate(issues):
+            issue_text = f"{issue.title} {issue.description or ''}"
+            decision = router.evaluate(issue_text, category_hint=issue.category)
+
+            assigned_official_id = None
+            for off in officials:
+                if off.department_id and off.department_id.strip().lower() == decision.department_name.strip().lower():
+                    assigned_official_id = off.id
+                    break
+
+            suffix = chr(65 + idx)
+            child_number = f"{grievance.grievance_number}-{suffix}"
+
+            child = Grievance(
+                id=str(uuid.uuid4()),
+                parent_id=grievance.id,
+                grievance_number=child_number,
+                citizen_id=citizen_id,
+                title=f"[{decision.category}] {issue.title}",
+                description=issue.description or issue.title,
+                original_text=issue.description or issue.title,
+                intake_mode=grievance.intake_mode,
+                original_language=grievance.original_language,
+                status=GrievanceStatus.FORWARDED,
+                priority=issue.priority.lower() if issue.priority else "medium",
+                severity=issue.severity,
+                category=decision.category,
+                department_id=decision.department_name,
+                assigned_official_id=assigned_official_id,
+                confirmed_location=grievance.confirmed_location,
+                location_sources=grievance.location_sources,
+                summary=f"Automated sub-ticket for issue {issue.issue_number} under {decision.statutory_act}: {issue.title}",
+            )
+            self.repo.db.add(child)
+            await self.repo.db.flush()
+
+            child_log = GrievanceAuditLog(
+                id=str(uuid.uuid4()),
+                grievance_id=child.id,
+                actor_id=citizen_id,
+                actor_role="system",
+                action_type="SUB_TICKET_AUTOMATICALLY_GENERATED",
+                previous_state=None,
+                new_state=GrievanceStatus.FORWARDED,
+                remarks=f"Decomposed from parent petition {grievance.grievance_number}. Routed to {decision.department_name} under {decision.statutory_act}.",
+            )
+            self.repo.db.add(child_log)
+
+            child_analysis = GrievanceAnalysis(
+                id=str(uuid.uuid4()),
+                grievance_id=child.id,
+                predicted_category=decision.department_name,
+                ai_explanation=decision.legal_explanation,
+                legal_grounding_references={
+                    "statutory_act": decision.statutory_act,
+                    "authority": decision.recommended_authority,
+                    "jurisdiction_level": decision.jurisdiction_level,
+                },
+            )
+            self.repo.db.add(child_analysis)
+            created_children.append(child)
+
+        if created_children:
+            parent_log = GrievanceAuditLog(
+                id=str(uuid.uuid4()),
+                grievance_id=grievance.id,
+                actor_id=citizen_id,
+                actor_role="system",
+                action_type="MULTI_ISSUE_DECOMPOSITION_EXECUTED",
+                previous_state=grievance.status,
+                new_state="MULTI_ISSUE_SPLIT",
+                remarks=f"Parent petition automatically decomposed into {len(created_children)} departmental sub-tickets.",
+            )
+            self.repo.db.add(parent_log)
+            grievance.status = "MULTI_ISSUE_SPLIT"
+            await self.repo.db.commit()
 
 

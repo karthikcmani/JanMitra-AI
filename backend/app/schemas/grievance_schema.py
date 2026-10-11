@@ -127,6 +127,25 @@ class GrievanceAttachmentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class SubGrievanceSummaryResponse(BaseModel):
+    id: str
+    grievance_number: str
+    citizen_id: str
+    parent_id: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    status: str
+    priority: str
+    category: Optional[str] = None
+    department_id: Optional[str] = None
+    assigned_official_id: Optional[str] = None
+    summary: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class GrievanceResponse(BaseModel):
     id: str
     grievance_number: str
@@ -149,12 +168,14 @@ class GrievanceResponse(BaseModel):
     category: Optional[str] = None
     department_id: Optional[str] = None
     official_clarification_question: Optional[str] = None
+    parent_id: Optional[str] = None
     confirmed_location: Optional[Dict[str, Any]] = None
     location_sources: Optional[Dict[str, Any]] = None
     attachments: List[GrievanceAttachmentResponse] = []
     audit_logs: List[GrievanceAuditLogResponse] = []
     issues: List[GrievanceIssueResponse] = []
     interview_questions: List[GrievanceInterviewQuestionResponse] = []
+    sub_grievances: List[SubGrievanceSummaryResponse] = []
     created_at: datetime
     updated_at: datetime
 

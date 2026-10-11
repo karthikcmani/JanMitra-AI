@@ -110,6 +110,12 @@ class Grievance(Base):
         nullable=True,
     )
     official_clarification_question: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    parent_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        ForeignKey("grievances.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -134,6 +140,12 @@ class Grievance(Base):
         back_populates="grievance",
         cascade="all, delete-orphan",
         lazy="selectin",
+    )
+    sub_grievances: Mapped[List["Grievance"]] = relationship(
+        "Grievance",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        foreign_keys=[parent_id],
     )
     analysis: Mapped[Optional["GrievanceAnalysis"]] = relationship(
         "GrievanceAnalysis",

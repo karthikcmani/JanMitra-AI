@@ -101,7 +101,14 @@ STRICT INSTRUCTIONS & JURISDICTION RULES:
   * If concerning roads, potholes, bridges, culverts: category is "Roads & Public Infrastructure".
   * If concerning electricity, wires, poles, transformers: category is "Power & Electricity".
   * If concerning local ward garbage, streetlights, municipal drainage gutters: category is "Local Body & Sanitation".
-- Identify if multiple independent actionable issues exist in the text.
+- MULTI-ISSUE DECOMPOSITION REQUIREMENT:
+  * Identify if multiple independent actionable issues exist in the text.
+  * When a petition mentions multiple distinct problems handled by different government departments, you MUST output a separate issue object for EACH distinct departmental concern in the "issues" array.
+  * For example, if a petition mentions canal poramboke encroachment AND drinking water pipe burst AND road potholes/damage, output separate issues:
+    1. Canal Encroachment -> "Revenue & Land"
+    2. Drinking Water Pipeline Burst -> "Water Supply & Drainage"
+    3. Road Potholes / Infrastructure Damage -> "Roads & Public Infrastructure"
+  * Do NOT merge issues belonging to different departments into a single combined issue.
 - For each issue, evaluate severity (LOW, MEDIUM, HIGH, CRITICAL) and priority (LOW, MEDIUM, HIGH, CRITICAL).
 - Extract structured facts (location, date, duration, affected_service, impact, people_affected, safety_hazard).
 - Identify any missing required information and generate specific interview questions for the citizen if facts are missing.
@@ -178,7 +185,11 @@ Respond ONLY with a valid JSON object matching this exact schema:
                         if candidates:
                             raw_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
                             if raw_text:
-                                llm_response_data = json.loads(raw_text)
+                                text_clean = raw_text.strip()
+                                if text_clean.startswith("```"):
+                                    text_clean = re.sub(r"^```(?:json)?\s*", "", text_clean, flags=re.IGNORECASE)
+                                    text_clean = re.sub(r"\s*```$", "", text_clean)
+                                llm_response_data = json.loads(text_clean)
                                 used_model = model_name
                                 break
                     elif resp.status_code == 429:
@@ -220,12 +231,38 @@ Respond ONLY with a valid JSON object matching this exact schema:
                     "required": False
                 })
 
-            llm_response_data = {
-                "summary": f"Reported grievance regarding {cat}: {summary_text}",
-                "language": grievance.original_language or "ml",
-                "overall_severity": "HIGH" if any(k in clean_text.lower() for k in ["urgent", "severe", "അടിയന്തര", "അപകട"]) else "MEDIUM",
-                "overall_priority": "high" if any(k in clean_text.lower() for k in ["urgent", "severe", "അടിയന്തര", "അപകട"]) else "medium",
-                "issues": [
+            # Sentence-by-sentence multi-issue decomposition
+            sentences = [s.strip() for s in re.split(r"[.!?\n]+", clean_text) if len(s.strip()) > 15]
+            detected_issues = []
+            seen_categories = set()
+
+            for s_idx, sentence in enumerate(sentences):
+                s_decision = SequentialRoutingEngine.evaluate(
+                    sentence,
+                    location=grievance.confirmed_location or {}
+                )
+                if s_decision.category not in seen_categories:
+                    seen_categories.add(s_decision.category)
+                    detected_issues.append({
+                        "issue_number": len(detected_issues) + 1,
+                        "title": f"Reported {s_decision.category} Issue",
+                        "description": sentence,
+                        "category": s_decision.category,
+                        "subcategory": "General",
+                        "severity": "HIGH" if ("കയ്യേറ്റം" in sentence or "അപകട" in sentence or "പൊട്ടി" in sentence) else "MEDIUM",
+                        "priority": "HIGH" if ("കയ്യേറ്റം" in sentence or "അപകട" in sentence or "പൊട്ടി" in sentence) else "MEDIUM",
+                        "extracted_facts": {
+                            "location": (grievance.confirmed_location or {}).get("ward", "Reported Ward"),
+                            "affected_service": s_decision.category,
+                            "statutory_act": s_decision.statutory_act,
+                        },
+                        "missing_facts": ["exact_house_number_or_landmark"] if questions_list else [],
+                        "interview_required": len(questions_list) > 0,
+                        "interview_questions": questions_list,
+                    })
+
+            if not detected_issues:
+                detected_issues = [
                     {
                         "issue_number": 1,
                         "title": f"Reported {cat} Issue",
@@ -244,6 +281,13 @@ Respond ONLY with a valid JSON object matching this exact schema:
                         "interview_questions": questions_list,
                     }
                 ]
+
+            llm_response_data = {
+                "summary": f"Reported grievance regarding {cat}: {summary_text}",
+                "language": grievance.original_language or "ml",
+                "overall_severity": "HIGH" if any(k in clean_text.lower() for k in ["urgent", "severe", "അടിയന്തര", "അപകട"]) else "MEDIUM",
+                "overall_priority": "high" if any(k in clean_text.lower() for k in ["urgent", "severe", "അടിയന്തര", "അപകട"]) else "medium",
+                "issues": detected_issues,
             }
 
         # 4. Multi-factor Priority Intelligence Evaluation

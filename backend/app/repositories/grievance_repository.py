@@ -63,6 +63,7 @@ class GrievanceRepository:
                 selectinload(Grievance.attachments),
                 selectinload(Grievance.issues),
                 selectinload(Grievance.interview_questions),
+                selectinload(Grievance.sub_grievances),
             )
             .where(Grievance.id == grievance.id)
         )
@@ -76,6 +77,7 @@ class GrievanceRepository:
                 selectinload(Grievance.attachments),
                 selectinload(Grievance.issues),
                 selectinload(Grievance.interview_questions),
+                selectinload(Grievance.sub_grievances),
             )
             .where(Grievance.id == grievance_id)
         )
@@ -91,6 +93,7 @@ class GrievanceRepository:
                 selectinload(Grievance.attachments),
                 selectinload(Grievance.issues),
                 selectinload(Grievance.interview_questions),
+                selectinload(Grievance.sub_grievances),
             )
             .where(
                 Grievance.id == grievance_id,
@@ -107,10 +110,12 @@ class GrievanceRepository:
                 selectinload(Grievance.attachments),
                 selectinload(Grievance.issues),
                 selectinload(Grievance.interview_questions),
+                selectinload(Grievance.sub_grievances),
             )
             .where(
                 Grievance.citizen_id == citizen_id,
                 Grievance.status != GrievanceStatus.DRAFT,
+                Grievance.parent_id.is_(None),
             )
             .order_by(Grievance.created_at.desc())
         )

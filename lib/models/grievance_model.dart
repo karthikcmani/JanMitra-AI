@@ -149,6 +149,57 @@ class GrievanceInterviewQuestionModel {
   }
 }
 
+class SubGrievanceSummaryModel {
+  final String id;
+  final String grievanceNumber;
+  final String? parentId;
+  final String? title;
+  final String? category;
+  final String? departmentId;
+  final String status;
+  final String priority;
+  final String? severity;
+  final String? summary;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  const SubGrievanceSummaryModel({
+    required this.id,
+    required this.grievanceNumber,
+    this.parentId,
+    this.title,
+    this.category,
+    this.departmentId,
+    required this.status,
+    required this.priority,
+    this.severity,
+    this.summary,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory SubGrievanceSummaryModel.fromJson(Map<String, dynamic> json) {
+    return SubGrievanceSummaryModel(
+      id: (json['id'] ?? '').toString(),
+      grievanceNumber: (json['grievance_number'] ?? '').toString(),
+      parentId: json['parent_id']?.toString(),
+      title: json['title']?.toString(),
+      category: json['category']?.toString(),
+      departmentId: json['department_id']?.toString(),
+      status: (json['status'] ?? 'submitted').toString(),
+      priority: (json['priority'] ?? 'medium').toString(),
+      severity: json['severity']?.toString(),
+      summary: json['summary']?.toString(),
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      updatedAt: json['updated_at'] != null
+          ? DateTime.tryParse(json['updated_at'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+    );
+  }
+}
+
 class GrievanceModel {
   final String id;
   final String grievanceNumber;
@@ -184,6 +235,7 @@ class GrievanceModel {
   final List<GrievanceAuditLogModel> auditLogs;
   final List<GrievanceIssueModel> issues;
   final List<GrievanceInterviewQuestionModel> interviewQuestions;
+  final List<SubGrievanceSummaryModel> subGrievances;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -222,6 +274,7 @@ class GrievanceModel {
     this.auditLogs = const [],
     this.issues = const [],
     this.interviewQuestions = const [],
+    this.subGrievances = const [],
     required this.createdAt,
     required this.updatedAt,
   });
@@ -256,6 +309,14 @@ class GrievanceModel {
         ? rawQuestions
             .map((item) =>
                 GrievanceInterviewQuestionModel.fromJson(item as Map<String, dynamic>))
+            .toList()
+        : [];
+
+    var rawSubGrievances = json['sub_grievances'] as List<dynamic>?;
+    List<SubGrievanceSummaryModel> parsedSubGrievances = rawSubGrievances != null
+        ? rawSubGrievances
+            .map((item) =>
+                SubGrievanceSummaryModel.fromJson(item as Map<String, dynamic>))
             .toList()
         : [];
 
@@ -301,6 +362,7 @@ class GrievanceModel {
       auditLogs: parsedLogs,
       issues: parsedIssues,
       interviewQuestions: parsedQuestions,
+      subGrievances: parsedSubGrievances,
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
           : DateTime.now(),

@@ -136,6 +136,11 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                 _buildSummaryCard(currentGrievance),
                 const SizedBox(height: 24),
 
+                if (currentGrievance.subGrievances.isNotEmpty) ...[
+                  _buildSubGrievancesCard(currentGrievance),
+                  const SizedBox(height: 24),
+                ],
+
                 if (currentGrievance.attachments.isNotEmpty) ...[
                   _buildAttachmentsCard(currentGrievance),
                   const SizedBox(height: 24),
@@ -278,6 +283,33 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
               ),
             ),
           ],
+          if (grievance.status.toLowerCase() == 'multi_issue_split') ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0284C7).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF0284C7).withValues(alpha: 0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.account_tree_outlined, size: 16, color: Color(0xFF0284C7)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Multi-department petition: Partitioned into sub-tickets below for parallel processing.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF0284C7),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           if (grievance.departmentId != null) ...[
             const SizedBox(height: 8),
             Row(
@@ -315,6 +347,132 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
               ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubGrievancesCard(GrievanceModel grievance) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardTheme.color,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFF0284C7).withValues(alpha: 0.4), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0284C7).withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0284C7).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.account_tree_rounded, color: Color(0xFF0284C7), size: 22),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Departmental Sub-Tickets',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                    ),
+                    Text(
+                      'Multi-issue petition split across ${grievance.subGrievances.length} departments',
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ...grievance.subGrievances.map((sub) {
+            final deptColor = _getDepartmentColor(sub.departmentId ?? '');
+            final statusColor = _getStatusColor(sub.status);
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white.withValues(alpha: 0.04)
+                    : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppTheme.borderLight),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(_getDepartmentIcon(sub.departmentId ?? ''), size: 16, color: deptColor),
+                          const SizedBox(width: 6),
+                          Text(
+                            sub.grievanceNumber,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: deptColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          sub.status.replaceAll('_', ' ').toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: statusColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    sub.departmentId ?? 'Assigned Department',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  ),
+                  if (sub.category != null && sub.category!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'Category: ${sub.category}',
+                      style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                    ),
+                  ],
+                  if (sub.title != null && sub.title!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      sub.title!,
+                      style: const TextStyle(fontSize: 12, height: 1.3),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }),
         ],
       ),
     );
@@ -1034,6 +1192,8 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
         return AppTheme.primaryBlue;
       case 'clarification_required':
         return AppTheme.warning;
+      case 'multi_issue_split':
+        return const Color(0xFF0284C7);
       case 'under_analysis':
       case 'under_processing':
       case 'forwarded':
@@ -1044,6 +1204,26 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
       default:
         return AppTheme.textSecondary;
     }
+  }
+
+  IconData _getDepartmentIcon(String dept) {
+    final d = dept.toLowerCase();
+    if (d.contains('water') || d.contains('kwa')) return Icons.water_drop_rounded;
+    if (d.contains('revenue') || d.contains('land')) return Icons.landscape_rounded;
+    if (d.contains('road') || d.contains('pwd')) return Icons.add_road_rounded;
+    if (d.contains('electric') || d.contains('kseb')) return Icons.electric_bolt_rounded;
+    if (d.contains('panchayat') || d.contains('lsgd')) return Icons.location_city_rounded;
+    return Icons.account_balance_rounded;
+  }
+
+  Color _getDepartmentColor(String dept) {
+    final d = dept.toLowerCase();
+    if (d.contains('water') || d.contains('kwa')) return const Color(0xFF0284C7);
+    if (d.contains('revenue') || d.contains('land')) return const Color(0xFFD97706);
+    if (d.contains('road') || d.contains('pwd')) return const Color(0xFF4F46E5);
+    if (d.contains('electric') || d.contains('kseb')) return const Color(0xFFEA580C);
+    if (d.contains('panchayat') || d.contains('lsgd')) return const Color(0xFF059669);
+    return AppTheme.primaryBlue;
   }
 
   Color _getPriorityBadgeColor(String priority) {

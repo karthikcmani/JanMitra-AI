@@ -202,6 +202,7 @@ class SequentialRoutingEngine:
         cls,
         text: str,
         location: Optional[Dict[str, Any]] = None,
+        category_hint: Optional[str] = None,
     ) -> SequentialRoutingDecision:
         """Executes sequential sentence-by-sentence contextual state routing."""
         clean_text = (text or "").strip()
@@ -273,6 +274,25 @@ class SequentialRoutingEngine:
             scores[detected_addressee_dept] += 35.0
             trace.append(f"Prior Boost: +35.0 to {detected_addressee_dept} from addressee recognition.")
 
+        # Category Hint Prior (from AI decomposition or metadata)
+        if category_hint:
+            hint_lower = category_hint.strip().lower()
+            if any(k in hint_lower for k in ["water", "drainage", "kwa"]):
+                scores["KWA"] += 35.0
+                trace.append("Category Hint Prior: +35.0 to KWA.")
+            elif any(k in hint_lower for k in ["revenue", "land"]):
+                scores["REV"] += 35.0
+                trace.append("Category Hint Prior: +35.0 to REV.")
+            elif any(k in hint_lower for k in ["road", "pwd", "infrastructure"]):
+                scores["PWD"] += 35.0
+                trace.append("Category Hint Prior: +35.0 to PWD.")
+            elif any(k in hint_lower for k in ["electric", "power", "kseb"]):
+                scores["KSEB"] += 35.0
+                trace.append("Category Hint Prior: +35.0 to KSEB.")
+            elif any(k in hint_lower for k in ["local", "sanitation", "lsgd"]):
+                scores["LSGD"] += 35.0
+                trace.append("Category Hint Prior: +35.0 to LSGD.")
+
         # Match Revenue Tokens
         rev_matches = [k for k in cls.REVENUE_KEYWORDS if k.lower() in text_lower]
         scores["REV"] += len(rev_matches) * 12.0
@@ -283,6 +303,11 @@ class SequentialRoutingEngine:
         # Match Drinking Water / KWA Positive Tokens
         kwa_matches = [k for k in cls.KWA_POSITIVE_KEYWORDS if k.lower() in text_lower]
         scores["KWA"] += len(kwa_matches) * 15.0
+
+        # Boost for active drinking water pipeline bursts / leaks
+        if any(k in text_lower for k in ["കുടിവെള്ള പൈപ്പ്", "പൈപ്പ് പൊട്ടി", "പൈപ്പ് ചോർച്ച", "pipe burst", "pipe leakage", "water leak"]):
+            scores["KWA"] += 35.0
+            trace.append("Active pipe burst detected: +35.0 to KWA.")
 
         # Match PWD Tokens
         pwd_matches = [k for k in cls.PWD_KEYWORDS if k.lower() in text_lower]
