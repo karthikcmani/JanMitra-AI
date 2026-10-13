@@ -273,9 +273,14 @@ class GrievanceIntakeNotifier extends StateNotifier<GrievanceIntakeState> {
         isLoading: false,
       );
     } catch (e) {
+      final msg = e is DioException
+          ? (e.response?.data is Map && e.response?.data['detail'] != null
+              ? e.response?.data['detail'].toString()
+              : (e.message ?? e.toString()))
+          : e.toString();
       state = state.copyWith(
         isLoading: false,
-        errorMessage: 'Failed to confirm grievance: ${e.toString()}',
+        errorMessage: 'Failed to confirm grievance: $msg',
       );
     }
   }

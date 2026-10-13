@@ -244,18 +244,27 @@ async def test_gemini_429_needs_verification_and_manual_entry_flow(tmp_path):
             error_message="Automatic text extraction is temporarily unavailable. Please enter or verify the complaint text manually.",
         )
 
-        with patch("app.services.extraction_service.FastAutoExtractionAdapter.extract_content", new_callable=AsyncMock, return_value=mock_result):
-            upload_res = await client.post(
-                f"/api/v1/grievances/{grievance_id}/attachments",
-                files={"file": ("petition_429.jpg", open(test_img, "rb"), "image/jpeg")},
-                headers=headers,
-            )
+        upload_res = await client.post(
+            f"/api/v1/grievances/{grievance_id}/attachments",
+            files={"file": ("petition_429.jpg", open(test_img, "rb"), "image/jpeg")},
+            headers=headers,
+        )
 
         assert upload_res.status_code == 201
         att_data = upload_res.json()
-        assert att_data["extraction_status"] == "needs_verification"
-        assert att_data["raw_extracted_text"] is None
-        assert "temporarily unavailable" in att_data["extraction_error"]
+        assert att_data["extraction_status"] == "pending"
+
+        with patch("app.services.extraction_service.FastAutoExtractionAdapter.extract_content", new_callable=AsyncMock, return_value=mock_result):
+            extract_res = await client.post(
+                f"/api/v1/grievances/{grievance_id}/attachments/{att_data['id']}/extract",
+                headers=headers,
+            )
+
+        assert extract_res.status_code == 200
+        ext_data = extract_res.json()
+        assert ext_data["extraction_status"] == "needs_verification"
+        assert ext_data.get("extracted_text") is None
+        assert "temporarily unavailable" in (ext_data.get("error_message") or "")
 
         # 4. Citizen verifies/transcribes text manually
         verified_text = "ഞങ്ങളുടെ ഗ്രാമത്തിൽ കുടിവെള്ള പൈപ്പ് പൊട്ടി വെള്ളം പാഴാകുന്നു. അടിയന്തരമായി കെ.ഡബ്ല്യു.എ. പരിഹരിക്കണം."

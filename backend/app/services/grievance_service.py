@@ -538,21 +538,12 @@ class GrievanceService:
             remarks=f"Citizen verified/provided petition text: {verified_text[:100]}...",
         )
         self.repo.db.add(audit_log)
-        await self.repo.db.commit()
 
-        # Trigger fast bounded AI analysis, Sprint 11 intelligence, legal, jurisdiction & routing pipeline
+        # Fast deterministic routing, jurisdiction, sub-grievances & notifications
         try:
-            from app.services.ai_intelligence_service import AIIntelligenceService
-            ai_intel = AIIntelligenceService(self.repo.db)
-            await ai_intel.analyze_grievance_intelligence(grievance.id)
-
             from app.services.official_service import OfficialService
             official_service = OfficialService(self.repo.db)
             await official_service.process_document_and_route(grievance.id, citizen_id)
-
-            from app.services.legal_service import LegalIntelligenceService
-            legal_intel = LegalIntelligenceService(self.repo.db)
-            await legal_intel.analyze_legal_grounding(grievance.id)
 
             from app.services.jurisdiction_service import JurisdictionIntelligenceService
             juris_service = JurisdictionIntelligenceService(self.repo.db)
@@ -572,7 +563,33 @@ class GrievanceService:
             )
         except Exception as e:
             import logging
-            logging.getLogger("grievance.pipeline").warning(f"AI intelligence pipeline note: {e}")
+            logging.getLogger("grievance.pipeline").warning(f"Routing pipeline note: {e}")
+
+        # Commit immediately so citizen verified ticket is permanently saved and responded to in <200ms
+        await self.repo.db.commit()
+
+        # Launch heavy external LLM operations asynchronously in background to eliminate mobile socket timeouts
+        async def _bg_llm_intelligence(g_id: str):
+            try:
+                from app.database.session import AsyncSessionLocal
+                async with AsyncSessionLocal() as bg_db:
+                    from app.services.ai_intelligence_service import AIIntelligenceService
+                    ai_intel = AIIntelligenceService(bg_db)
+                    await ai_intel.analyze_grievance_intelligence(g_id)
+
+                    from app.services.legal_service import LegalIntelligenceService
+                    legal_intel = LegalIntelligenceService(bg_db)
+                    await legal_intel.analyze_legal_grounding(g_id)
+                    await bg_db.commit()
+            except Exception as bg_err:
+                import logging
+                logging.getLogger("grievance.bg").warning(f"Background LLM intelligence note: {bg_err}")
+
+        try:
+            import asyncio
+            asyncio.create_task(_bg_llm_intelligence(grievance.id))
+        except Exception:
+            pass
 
         self.repo.db.expire_all()
         updated = await self.repo.get_user_grievance(grievance_id, citizen_id)

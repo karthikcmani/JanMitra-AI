@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
@@ -14,6 +15,27 @@ import '../../theme/app_theme.dart';
 import '../../utils/constants.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_text_field.dart';
+
+/// Top-level worker executed in a background Dart isolate via compute().
+/// Downscales large photos to max 1280px and compresses to JPEG 75% quality.
+Uint8List _compressImageWorker(Uint8List rawBytes) {
+  try {
+    final decoded = img.decodeImage(rawBytes);
+    if (decoded == null) return rawBytes;
+    img.Image processed = decoded;
+    const maxDim = 1280;
+    if (processed.width > maxDim || processed.height > maxDim) {
+      if (processed.width >= processed.height) {
+        processed = img.copyResize(processed, width: maxDim);
+      } else {
+        processed = img.copyResize(processed, height: maxDim);
+      }
+    }
+    return Uint8List.fromList(img.encodeJpg(processed, quality: 75));
+  } catch (_) {
+    return rawBytes;
+  }
+}
 
 class ComplaintFormScreen extends ConsumerStatefulWidget {
   final String? complaintId;
@@ -80,6 +102,32 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
   // 1. IN-APP LIVE CAMERA VIEWFINDER & OS CAMERA FALLBACK
   // ===========================================================================
 
+  /// Downscales high-resolution camera/gallery photos to max 1280px at 75% JPEG quality.
+  /// Slashes 2-5 MB raw sensor captures down to ~60-120 KB, eliminating mobile 4G timeouts.
+  Future<File> _optimizeImageForUpload(String rawPath) async {
+    final rawFile = File(rawPath);
+    if (kIsWeb) return rawFile;
+    try {
+      final rawBytes = await rawFile.readAsBytes();
+      if (rawBytes.length <= 150 * 1024) {
+        return rawFile;
+      }
+      final compressedBytes = await compute(_compressImageWorker, rawBytes);
+      final tempDir = await getTemporaryDirectory();
+      final optFile = File(
+        '${tempDir.path}/opt_petition_${DateTime.now().millisecondsSinceEpoch}.jpg',
+      );
+      await optFile.writeAsBytes(compressedBytes);
+      debugPrint(
+        '--> [IMAGE OPT] Compressed image from ${rawBytes.length} to ${compressedBytes.length} bytes',
+      );
+      return optFile;
+    } catch (e) {
+      debugPrint('--> [IMAGE OPT] Optimization fallback to raw: $e');
+      return rawFile;
+    }
+  }
+
   Future<void> _openLiveCameraViewfinder() async {
     if (kIsWeb) {
       await _captureFromSystemCamera();
@@ -109,11 +157,12 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
       );
 
       if (capturedFile != null && mounted) {
-        final bytes = await capturedFile.length();
+        final optFile = await _optimizeImageForUpload(capturedFile.path);
+        final bytes = await optFile.length();
         final fileName =
             'live_camera_petition_${DateTime.now().millisecondsSinceEpoch}.jpg';
         ref.read(grievanceIntakeProvider.notifier).setPickedFile(
-              capturedFile.path,
+              optFile.path,
               fileName,
               bytes,
             );
@@ -130,19 +179,20 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
       final picker = ImagePicker();
       final photo = await picker.pickImage(
         source: ImageSource.camera,
-        imageQuality: 92,
-        maxWidth: 2048,
-        maxHeight: 2048,
+        imageQuality: 80,
+        maxWidth: 1280,
+        maxHeight: 1280,
         preferredCameraDevice: CameraDevice.rear,
       );
 
       if (photo != null && mounted) {
-        final bytes = await photo.length();
+        final optFile = await _optimizeImageForUpload(photo.path);
+        final bytes = await optFile.length();
         final fileName = photo.name.isNotEmpty
             ? photo.name
             : 'camera_petition_${DateTime.now().millisecondsSinceEpoch}.jpg';
         ref.read(grievanceIntakeProvider.notifier).setPickedFile(
-              photo.path,
+              optFile.path,
               fileName,
               bytes,
             );
@@ -165,18 +215,19 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
       final picker = ImagePicker();
       final image = await picker.pickImage(
         source: ImageSource.gallery,
-        imageQuality: 92,
-        maxWidth: 2048,
-        maxHeight: 2048,
+        imageQuality: 80,
+        maxWidth: 1280,
+        maxHeight: 1280,
       );
 
       if (image != null && mounted) {
-        final bytes = await image.length();
+        final optFile = await _optimizeImageForUpload(image.path);
+        final bytes = await optFile.length();
         final fileName = image.name.isNotEmpty
             ? image.name
             : 'gallery_petition_${DateTime.now().millisecondsSinceEpoch}.jpg';
         ref.read(grievanceIntakeProvider.notifier).setPickedFile(
-              image.path,
+              optFile.path,
               fileName,
               bytes,
             );
@@ -320,10 +371,13 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
 
       if (result != null && result.files.single.path != null) {
         final file = result.files.single;
+        final isImage = ['jpg', 'jpeg', 'png', 'webp'].contains(file.extension?.toLowerCase());
+        final finalFile = isImage ? await _optimizeImageForUpload(file.path!) : File(file.path!);
+        final bytes = await finalFile.length();
         ref.read(grievanceIntakeProvider.notifier).setPickedFile(
-              file.path!,
+              finalFile.path,
               file.name,
-              file.size,
+              bytes,
             );
         if (isAudio) {
           await _triggerExtraction();

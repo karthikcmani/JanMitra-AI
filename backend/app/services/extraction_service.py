@@ -669,9 +669,8 @@ class GeminiVisionOCRAdapter(BaseExtractionAdapter):
             # Production-verified active vision models ordered by speed and accuracy
             models_to_try = [
                 "gemini-3.5-flash-lite",
-                "gemini-3.1-flash-lite",
-                "gemini-3.6-flash",
-                "gemini-flash-lite-latest",
+                "gemini-2.0-flash",
+                "gemini-flash-latest",
             ]
 
             async with httpx.AsyncClient(timeout=15.0) as client:
@@ -720,7 +719,7 @@ class GeminiVisionOCRAdapter(BaseExtractionAdapter):
             mime_type = attachment.mime_type or ("application/pdf" if file_path.suffix.lower() == ".pdf" else "image/jpeg")
             sdk_part = types.Part.from_bytes(data=file_path.read_bytes(), mime_type=mime_type)
 
-            for model_name in ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash"]:
+            for model_name in ["gemini-3.5-flash-lite", "gemini-2.0-flash", "gemini-flash-latest"]:
                 try:
                     response = await asyncio.to_thread(
                         client.models.generate_content,
@@ -748,7 +747,7 @@ class GeminiVisionOCRAdapter(BaseExtractionAdapter):
                 from PIL import Image
 
                 legacy_genai.configure(api_key=api_key.strip())
-                for model_name in ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash"]:
+                for model_name in ["gemini-3.5-flash-lite", "gemini-2.0-flash", "gemini-flash-latest"]:
                     try:
                         model = legacy_genai.GenerativeModel(model_name)
                         img = Image.open(file_path)

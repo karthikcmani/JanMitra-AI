@@ -39,9 +39,9 @@ class ApiService {
   }) : _dio = Dio(
           BaseOptions(
             baseUrl: baseUrl ?? preferencesService?.customApiBaseUrl ?? defaultBaseUrl,
-            connectTimeout: const Duration(seconds: 45),
-            receiveTimeout: const Duration(seconds: 60),
-            sendTimeout: const Duration(seconds: 60),
+            connectTimeout: const Duration(seconds: 60),
+            receiveTimeout: const Duration(seconds: 90),
+            sendTimeout: const Duration(seconds: 90),
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
@@ -67,13 +67,39 @@ class ApiService {
           debugPrint('<-- Data: ${response.data}');
           return handler.next(response);
         },
-        onError: (DioException error, handler) {
+        onError: (DioException error, handler) async {
           debugPrint('<-- [DIO ERROR ${error.response?.statusCode}] ${error.requestOptions.uri}');
           debugPrint('<-- Error Data: ${error.response?.data}');
           debugPrint('<-- Error Message: ${error.message}');
 
+          // Check for transient mobile carrier socket reset / abort
+          final errStr = error.error?.toString() ?? '';
+          final isTransientAbort = error.type == DioExceptionType.unknown &&
+              (errStr.contains('Software caused connection abort') ||
+                  errStr.contains('Connection closed') ||
+                  errStr.contains('Connection reset') ||
+                  errStr.contains('Broken pipe'));
+
+          final retryCount = error.requestOptions.extra['retry_count'] as int? ?? 0;
+          if (isTransientAbort && retryCount < 1) {
+            error.requestOptions.extra['retry_count'] = retryCount + 1;
+            debugPrint('--> [DIO RETRY] Retrying request after transient abort: ${error.requestOptions.uri}');
+            await Future.delayed(const Duration(milliseconds: 1200));
+            try {
+              final response = await _dio.fetch(error.requestOptions);
+              return handler.resolve(response);
+            } catch (retryError) {
+              if (retryError is DioException) {
+                return handler.next(retryError);
+              }
+            }
+          }
+
           String customMsg = error.message ?? 'Unknown connection error';
-          if (error.type == DioExceptionType.connectionTimeout) {
+          if (errStr.contains('Software caused connection abort')) {
+            customMsg =
+                'Mobile network interrupted. Please check your signal and tap to retry.';
+          } else if (error.type == DioExceptionType.connectionTimeout) {
             customMsg =
                 'Connection timed out reaching JanMitra server. The cloud service may be waking up, please retry in a moment.';
           } else if (error.type == DioExceptionType.receiveTimeout) {
