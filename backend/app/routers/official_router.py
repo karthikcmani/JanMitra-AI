@@ -1,5 +1,6 @@
+import logging
 from typing import List, Optional
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_db
@@ -13,6 +14,7 @@ from app.services.official_service import (
     OfficialService,
 )
 
+logger = logging.getLogger("official_router")
 router = APIRouter(prefix="/official", tags=["Official Copilot"])
 
 
@@ -26,9 +28,18 @@ async def get_official_dashboard_summary(
     db: AsyncSession = Depends(get_db),
     current_user: UserResponse = Depends(get_current_official_or_admin),
 ):
-    service = OfficialService(db)
-    dept = current_user.department_id if current_user.role == "official" else None
-    return await service.get_dashboard_summary(department_id=dept)
+    try:
+        service = OfficialService(db)
+        dept = current_user.department_id if current_user.role == "official" else None
+        return await service.get_dashboard_summary(department_id=dept)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_official_dashboard_summary: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load dashboard summary: {str(e)}",
+        )
 
 
 @router.get(
@@ -46,15 +57,24 @@ async def search_grievances_for_official(
     db: AsyncSession = Depends(get_db),
     current_user: UserResponse = Depends(get_current_official_or_admin),
 ):
-    service = OfficialService(db)
-    effective_dept = department_id or (current_user.department_id if current_user.role == "official" else None)
-    return await service.search_official_grievances(
-        query=query,
-        status=status,
-        priority=priority,
-        department_id=effective_dept,
-        category=category,
-    )
+    try:
+        service = OfficialService(db)
+        effective_dept = department_id or (current_user.department_id if current_user.role == "official" else None)
+        return await service.search_official_grievances(
+            query=query,
+            status=status,
+            priority=priority,
+            department_id=effective_dept,
+            category=category,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in search_grievances_for_official: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to search grievances: {str(e)}",
+        )
 
 
 @router.get(
@@ -67,9 +87,18 @@ async def get_attention_queue_for_official(
     db: AsyncSession = Depends(get_db),
     current_user: UserResponse = Depends(get_current_official_or_admin),
 ):
-    service = OfficialService(db)
-    dept = current_user.department_id if current_user.role == "official" else None
-    return await service.get_attention_queue(department_id=dept)
+    try:
+        service = OfficialService(db)
+        dept = current_user.department_id if current_user.role == "official" else None
+        return await service.get_attention_queue(department_id=dept)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_attention_queue_for_official: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load attention queue: {str(e)}",
+        )
 
 
 @router.get(
@@ -82,8 +111,17 @@ async def get_admin_department_workload(
     db: AsyncSession = Depends(get_db),
     current_user: UserResponse = Depends(get_current_official_or_admin),
 ):
-    service = OfficialService(db)
-    return await service.get_department_workload()
+    try:
+        service = OfficialService(db)
+        return await service.get_department_workload()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_admin_department_workload: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load department workload: {str(e)}",
+        )
 
 
 @router.get(

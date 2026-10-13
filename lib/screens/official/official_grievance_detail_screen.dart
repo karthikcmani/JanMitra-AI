@@ -5,6 +5,7 @@ import '../../models/grievance_model.dart';
 import '../../providers/theme_provider.dart';
 import '../../repositories/official_repository.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/attachment_preview_dialog.dart';
 
 final officialGrievanceDetailProvider = FutureProvider.family.autoDispose<GrievanceModel, String>((ref, id) async {
   final repo = ref.watch(officialRepositoryProvider);
@@ -313,24 +314,41 @@ class _OfficialGrievanceDetailScreenState extends ConsumerState<OfficialGrievanc
               Column(
                 children: g.attachments.map((att) {
                   final isCompleted = att.extractionStatus == 'completed';
+                  final kind = getAttachmentKind(att.originalFilename, att.mimeType);
+                  final isAudio = kind == AttachmentKind.audio;
+
                   return Container(
                     margin: const EdgeInsets.only(bottom: 10),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.blue.withValues(alpha: 0.04),
+                      color: isAudio
+                          ? const Color(0xFF7C3AED).withValues(alpha: 0.04)
+                          : Colors.blue.withValues(alpha: 0.04),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
+                      border: Border.all(
+                        color: isAudio
+                            ? const Color(0xFF7C3AED).withValues(alpha: 0.25)
+                            : Colors.blue.withValues(alpha: 0.2),
+                      ),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.insert_drive_file_outlined, color: AppTheme.primaryBlue, size: 20),
+                            Icon(
+                              isAudio
+                                  ? Icons.mic_rounded
+                                  : (kind == AttachmentKind.pdf ? Icons.picture_as_pdf_rounded : Icons.insert_drive_file_outlined),
+                              color: isAudio ? const Color(0xFF7C3AED) : AppTheme.primaryBlue,
+                              size: 20,
+                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                att.originalFilename.isNotEmpty ? att.originalFilename : 'Attachment Document',
+                                att.originalFilename.isNotEmpty
+                                    ? att.originalFilename
+                                    : (isAudio ? 'Voice Petition Recording' : 'Attachment Document'),
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                               ),
                             ),
@@ -355,7 +373,10 @@ class _OfficialGrievanceDetailScreenState extends ConsumerState<OfficialGrievanc
                         ),
                         if (att.rawExtractedText != null && att.rawExtractedText!.isNotEmpty) ...[
                           const SizedBox(height: 8),
-                          const Text('Extracted OCR Text:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                          Text(
+                            isAudio ? 'Extracted Voice Transcript:' : 'Extracted OCR Text:',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
                           const SizedBox(height: 2),
                           Text(
                             att.rawExtractedText!,
@@ -369,9 +390,17 @@ class _OfficialGrievanceDetailScreenState extends ConsumerState<OfficialGrievanc
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                               visualDensity: VisualDensity.compact,
+                              foregroundColor: isAudio ? const Color(0xFF7C3AED) : null,
+                              side: isAudio ? const BorderSide(color: Color(0xFF7C3AED)) : null,
                             ),
-                            icon: const Icon(Icons.remove_red_eye_outlined, size: 16),
-                            label: const Text('View Original Document', style: TextStyle(fontSize: 11)),
+                            icon: Icon(
+                              isAudio ? Icons.play_circle_outline_rounded : Icons.remove_red_eye_outlined,
+                              size: 16,
+                            ),
+                            label: Text(
+                              isAudio ? 'Listen to Voice Petition' : 'View Original Document',
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
                             onPressed: () => _showAttachmentPreview(context, g.id, att),
                           ),
                         ),
@@ -903,95 +932,10 @@ class _OfficialGrievanceDetailScreenState extends ConsumerState<OfficialGrievanc
   void _showAttachmentPreview(BuildContext context, String grievanceId, GrievanceAttachmentModel att) {
     final baseUrl = ref.read(apiServiceProvider).baseUrl;
     final fileUrl = '$baseUrl/grievances/$grievanceId/attachments/${att.id}';
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        insetPadding: const EdgeInsets.all(12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  const Icon(Icons.description_outlined, color: AppTheme.primaryBlue, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      att.originalFilename.isNotEmpty ? att.originalFilename : 'Original Citizen Document',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 20),
-                    onPressed: () => Navigator.of(ctx).pop(),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            Flexible(
-              child: Container(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(context).size.height * 0.75,
-                ),
-                color: Colors.black87,
-                child: InteractiveViewer(
-                  panEnabled: true,
-                  minScale: 0.5,
-                  maxScale: 4.0,
-                  child: Center(
-                    child: Image.network(
-                      fileUrl,
-                      fit: BoxFit.contain,
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(32),
-                            child: CircularProgressIndicator(color: Colors.white),
-                          ),
-                        );
-                      },
-                      errorBuilder: (context, error, stackTrace) {
-                        return Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.broken_image_outlined, size: 48, color: Colors.white70),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Unable to load preview: $error',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(color: Colors.white70, fontSize: 12),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    child: const Text('Close'),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+    showAttachmentPreviewModal(
+      context,
+      fileUrl: fileUrl,
+      attachment: att,
     );
   }
 }

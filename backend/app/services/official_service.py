@@ -197,54 +197,86 @@ class OfficialService:
         )
 
     async def get_official_grievance_by_id(self, grievance_id: str) -> Optional[OfficialGrievanceDetailResponse]:
-        res = await self.db.execute(select(Grievance).where(Grievance.id == grievance_id))
+        from sqlalchemy.orm import selectinload
+        res = await self.db.execute(
+            select(Grievance)
+            .options(
+                selectinload(Grievance.attachments),
+                selectinload(Grievance.audit_logs),
+                selectinload(Grievance.citizen),
+                selectinload(Grievance.assigned_official),
+                selectinload(Grievance.analysis),
+            )
+            .where(Grievance.id == grievance_id)
+        )
         g = res.scalar_one_or_none()
         if not g:
             return None
         return await self._build_official_detail_response(g)
 
     async def get_all_official_grievances(self) -> List[OfficialGrievanceDetailResponse]:
-        stmt = select(Grievance).order_by(Grievance.created_at.desc())
+        from sqlalchemy.orm import selectinload
+        stmt = (
+            select(Grievance)
+            .options(
+                selectinload(Grievance.attachments),
+                selectinload(Grievance.audit_logs),
+                selectinload(Grievance.citizen),
+                selectinload(Grievance.assigned_official),
+                selectinload(Grievance.analysis),
+            )
+            .order_by(Grievance.created_at.desc())
+        )
         res = await self.db.execute(stmt)
         grievances = res.scalars().all()
         return [await self._build_official_detail_response(g) for g in grievances]
 
     async def _build_official_detail_response(self, g: Grievance) -> OfficialGrievanceDetailResponse:
-        # Fetch citizen user details
-        citizen_res = await self.db.execute(select(User).where(User.id == g.citizen_id))
-        citizen = citizen_res.scalar_one_or_none()
+        # Fetch citizen user details (uses preloaded relationship if available)
+        citizen = g.citizen
+        if not citizen and g.citizen_id:
+            citizen_res = await self.db.execute(select(User).where(User.id == g.citizen_id))
+            citizen = citizen_res.scalar_one_or_none()
 
         assigned_off_name = None
-        if getattr(g, "assigned_official_id", None):
+        if g.assigned_official:
+            assigned_off_name = g.assigned_official.full_name
+        elif getattr(g, "assigned_official_id", None):
             off_res = await self.db.execute(select(User).where(User.id == g.assigned_official_id))
             off_user = off_res.scalar_one_or_none()
             if off_user:
                 assigned_off_name = off_user.full_name
 
-        # Fetch attachments
-        atts_res = await self.db.execute(
-            select(GrievanceAttachment).where(GrievanceAttachment.grievance_id == g.id)
-        )
-        attachments = atts_res.scalars().all()
+        # Fetch attachments (uses preloaded collection if available)
+        attachments = g.attachments if hasattr(g, "attachments") and g.attachments is not None else []
+        if not attachments:
+            atts_res = await self.db.execute(
+                select(GrievanceAttachment).where(GrievanceAttachment.grievance_id == g.id)
+            )
+            attachments = atts_res.scalars().all()
 
         # Aggregate raw OCR text
         raw_ocr = "\n".join(
             [a.raw_extracted_text for a in attachments if a.raw_extracted_text]
         )
 
-        # Fetch analysis
-        analysis_res = await self.db.execute(
-            select(GrievanceAnalysis).where(GrievanceAnalysis.grievance_id == g.id)
-        )
-        analysis = analysis_res.scalar_one_or_none()
+        # Fetch analysis (uses preloaded object if available)
+        analysis = g.analysis
+        if not analysis:
+            analysis_res = await self.db.execute(
+                select(GrievanceAnalysis).where(GrievanceAnalysis.grievance_id == g.id)
+            )
+            analysis = analysis_res.scalar_one_or_none()
 
-        # Fetch audit logs
-        logs_res = await self.db.execute(
-            select(GrievanceAuditLog)
-            .where(GrievanceAuditLog.grievance_id == g.id)
-            .order_by(GrievanceAuditLog.created_at.asc())
-        )
-        audit_logs = logs_res.scalars().all()
+        # Fetch audit logs (uses preloaded collection if available)
+        audit_logs = g.audit_logs if hasattr(g, "audit_logs") and g.audit_logs is not None else []
+        if not audit_logs:
+            logs_res = await self.db.execute(
+                select(GrievanceAuditLog)
+                .where(GrievanceAuditLog.grievance_id == g.id)
+                .order_by(GrievanceAuditLog.created_at.asc())
+            )
+            audit_logs = logs_res.scalars().all()
 
         from app.services.sequential_routing_engine import SequentialRoutingEngine
         eval_text = (g.title or "") + " " + (g.description or "") + " " + (raw_ocr or g.original_text or "")
@@ -362,7 +394,7 @@ class OfficialService:
                     "previous_state": l.previous_state,
                     "new_state": l.new_state,
                     "remarks": l.remarks,
-                    "created_at": l.created_at.isoformat(),
+                    "created_at": l.created_at.isoformat() if hasattr(l.created_at, "isoformat") else str(l.created_at or ""),
                 }
                 for l in audit_logs
             ],
@@ -625,23 +657,29 @@ class OfficialService:
         return await self._build_official_detail_response(grievance)
 
     async def get_dashboard_summary(self, department_id: Optional[str] = None) -> OfficialDashboardSummaryResponse:
-        all_grievances = await self.get_all_official_grievances()
-        if department_id:
-            all_grievances = await self.search_official_grievances(department_id=department_id)
+        filtered = await self.search_official_grievances(department_id=department_id) if department_id else await self.get_all_official_grievances()
+        total = len(filtered)
 
-        total = len(all_grievances)
+        pending_count = sum(1 for g in filtered if g.status in ("draft", "intake_received", "under_analysis"))
+        under_processing_count = sum(1 for g in filtered if g.status == "under_processing")
+        clarification_count = sum(1 for g in filtered if g.status == "clarification_required")
+        forwarded_count = sum(1 for g in filtered if g.status == "forwarded")
+        resolved_count = sum(1 for g in filtered if g.status in ("resolved", "closed"))
+        high_priority_count = sum(1 for g in filtered if g.priority.lower() in ("high", "critical"))
 
-        pending_count = sum(1 for g in all_grievances if g.status in ("draft", "intake_received", "under_analysis"))
-        under_processing_count = sum(1 for g in all_grievances if g.status == "under_processing")
-        clarification_count = sum(1 for g in all_grievances if g.status == "clarification_required")
-        forwarded_count = sum(1 for g in all_grievances if g.status == "forwarded")
-        resolved_count = sum(1 for g in all_grievances if g.status in ("resolved", "closed"))
-        high_priority_count = sum(1 for g in all_grievances if g.priority.lower() in ("high", "critical"))
+        now_utc = datetime.now(timezone.utc)
+        start_of_today = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
 
-        start_of_today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        today_count = sum(1 for g in all_grievances if g.created_at >= start_of_today)
+        def _is_today(dt: Optional[datetime]) -> bool:
+            if not dt:
+                return False
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt >= start_of_today
 
-        recent = all_grievances[:5]
+        today_count = sum(1 for g in filtered if _is_today(g.created_at))
+
+        recent = filtered[:5]
 
         return OfficialDashboardSummaryResponse(
             total_grievances=total,
@@ -663,16 +701,29 @@ class OfficialService:
         department_id: Optional[str] = None,
         category: Optional[str] = None,
     ) -> List[OfficialGrievanceDetailResponse]:
-        all_grievances = await self.get_all_official_grievances()
-        filtered = []
+        from sqlalchemy.orm import selectinload
+        stmt = (
+            select(Grievance)
+            .options(
+                selectinload(Grievance.attachments),
+                selectinload(Grievance.audit_logs),
+                selectinload(Grievance.citizen),
+                selectinload(Grievance.assigned_official),
+                selectinload(Grievance.analysis),
+            )
+            .order_by(Grievance.created_at.desc())
+        )
+        res = await self.db.execute(stmt)
+        raw_grievances = res.scalars().all()
+        matched = []
 
-        for g in all_grievances:
+        for g in raw_grievances:
             if status and g.status.lower() != status.lower():
                 continue
             if priority and g.priority.lower() != priority.lower():
                 continue
             if department_id:
-                effective_dept = (g.assigned_department or g.predicted_department or "").lower()
+                effective_dept = (g.department_id or (g.analysis.predicted_category if g.analysis and g.analysis.predicted_category else "")).lower()
                 dept_query = department_id.lower()
                 is_kwa = "kwa" in dept_query or "water" in dept_query
                 is_pwd = "pwd" in dept_query or "works" in dept_query or "road" in dept_query
@@ -693,37 +744,43 @@ class OfficialService:
                 continue
             if query and query.strip():
                 q = query.strip().lower()
+                citizen_name = g.citizen.full_name.lower() if g.citizen else ""
                 text_match = (
                     q in g.id.lower()
                     or q in (g.title or "").lower()
                     or q in (g.description or "").lower()
                     or q in g.grievance_number.lower()
                     or q in (g.original_text or "").lower()
-                    or q in (g.citizen_name or "").lower()
+                    or q in citizen_name
                 )
                 if not text_match:
                     continue
-            filtered.append(g)
+            matched.append(g)
 
-        return filtered
+        return [await self._build_official_detail_response(g) for g in matched]
 
     async def get_attention_queue(self, department_id: Optional[str] = None) -> List[OfficialGrievanceDetailResponse]:
-        all_grievances = await self.get_all_official_grievances()
-        if department_id:
-            all_grievances = await self.search_official_grievances(department_id=department_id)
+        all_grievances = await self.search_official_grievances(department_id=department_id) if department_id else await self.get_all_official_grievances()
 
         def attention_sort_key(g: OfficialGrievanceDetailResponse):
             base_score = g.priority_score if g.priority_score is not None else 50
-            # Extra urgency weighting for citizen clarification responses awaiting official action
             if g.status == "clarification_required":
                 base_score += 5
-            return (base_score, -g.created_at.timestamp())
+            ts = g.created_at.timestamp() if hasattr(g.created_at, "timestamp") else 0.0
+            return (base_score, -ts)
 
         sorted_queue = sorted(all_grievances, key=attention_sort_key, reverse=True)
         return sorted_queue
 
     async def get_department_workload(self) -> List[DepartmentWorkloadResponse]:
-        all_grievances = await self.get_all_official_grievances()
+        from sqlalchemy.orm import selectinload
+        stmt = (
+            select(Grievance)
+            .options(selectinload(Grievance.analysis))
+        )
+        res = await self.db.execute(stmt)
+        all_grievances = res.scalars().all()
+
         depts = [
             "Kerala Water Authority (KWA)",
             "Public Works Department (PWD)",
@@ -734,10 +791,25 @@ class OfficialService:
 
         workloads = []
         for d in depts:
-            dept_g = [
-                g for g in all_grievances
-                if (g.assigned_department == d) or (not g.assigned_department and g.predicted_department == d)
-            ]
+            dept_key = d.lower()
+            is_kwa = "kwa" in dept_key
+            is_pwd = "pwd" in dept_key
+            is_kseb = "kseb" in dept_key
+            is_lsgd = "lsgd" in dept_key
+            is_rev = "revenue" in dept_key
+
+            dept_g = []
+            for g in all_grievances:
+                eff = (g.department_id or (g.analysis.predicted_category if g.analysis else "") or "").lower()
+                match = (dept_key in eff) or \
+                        (is_kwa and ("kwa" in eff or "water" in eff)) or \
+                        (is_pwd and ("pwd" in eff or "road" in eff or "works" in eff)) or \
+                        (is_kseb and ("kseb" in eff or "power" in eff or "electricity" in eff)) or \
+                        (is_lsgd and ("lsgd" in eff or "panchayat" in eff)) or \
+                        (is_rev and ("revenue" in eff or "admin" in eff))
+                if match:
+                    dept_g.append(g)
+
             pending = sum(1 for g in dept_g if g.status in ("draft", "intake_received", "under_analysis"))
             under_proc = sum(1 for g in dept_g if g.status == "under_processing")
             clarification = sum(1 for g in dept_g if g.status == "clarification_required")

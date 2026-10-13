@@ -398,7 +398,11 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
               // Interactive Analytics Cards
               summaryAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, s) => Text('Summary error: $e', style: const TextStyle(color: AppTheme.danger)),
+                error: (e, s) => _buildErrorStateCard(
+                  title: 'Unable to Load Dashboard Summary',
+                  error: e.toString(),
+                  onRetry: () => ref.invalidate(officialSummaryProvider),
+                ),
                 data: (summary) => _buildSummaryCards(summary),
               ),
 
@@ -446,7 +450,11 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                     SizedBox(height: 20),
                   ],
                 ),
-                error: (e, s) => Text('Search error: $e', style: const TextStyle(color: AppTheme.danger)),
+                error: (e, s) => _buildErrorStateCard(
+                  title: 'Unable to Load Grievance Queue',
+                  error: e.toString(),
+                  onRetry: () => ref.invalidate(officialFilteredGrievancesProvider),
+                ),
                 data: (grievances) {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -504,12 +512,67 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
               const SizedBox(height: 10),
               workloadAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, s) => Text('Workload error: $e', style: const TextStyle(color: AppTheme.danger)),
+                error: (e, s) => _buildErrorStateCard(
+                  title: 'Unable to Load Department Workload',
+                  error: e.toString(),
+                  onRetry: () => ref.invalidate(departmentWorkloadProvider),
+                ),
                 data: (workloads) => _buildWorkloadList(workloads),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildErrorStateCard({
+    required String title,
+    required String error,
+    required VoidCallback onRetry,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.error_outline_rounded, color: Colors.red.shade700, size: 24),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.red.shade900),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  error.contains('Server encountered') || error.contains('DioException')
+                      ? 'The server is syncing department records. Tap Retry to refresh.'
+                      : error,
+                  style: TextStyle(fontSize: 11, color: Colors.red.shade800),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          TextButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh_rounded, size: 16),
+            label: const Text('Retry', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red.shade900,
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+        ],
       ),
     );
   }
