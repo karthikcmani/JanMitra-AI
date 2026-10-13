@@ -1013,15 +1013,7 @@ class FastAutoExtractionAdapter(BaseExtractionAdapter):
     ) -> NormalizedExtractionResult:
         now = datetime.now(timezone.utc)
 
-        # 1. Voice recording check
-        if attachment.attachment_type == AttachmentType.VOICE_RECORDING or (
-            file_path and file_path.suffix.lower() in [".wav", ".mp3", ".m4a", ".ogg", ".flac"]
-        ):
-            from app.services.voice_service import VoiceTranscriptionAdapter
-            va = VoiceTranscriptionAdapter()
-            return await va.extract_content(attachment, file_path)
-
-        # 2. Explicit E2E Test Trigger check (for test suite dummy byte fixtures)
+        # 1. Explicit E2E Test Trigger check (for test suite dummy byte fixtures)
         if attachment.original_filename and (
             "e2e_mock_test" in attachment.original_filename.lower()
             or "mock_test_trigger" in attachment.original_filename.lower()
@@ -1030,6 +1022,16 @@ class FastAutoExtractionAdapter(BaseExtractionAdapter):
         ):
             mock = MockExtractionAdapter()
             return await mock.extract_content(attachment, file_path)
+
+        # 2. Voice recording check (Live microphone recordings & uploaded audio files)
+        if attachment.attachment_type == AttachmentType.VOICE_RECORDING or (
+            file_path
+            and file_path.suffix.lower()
+            in [".wav", ".mp3", ".m4a", ".aac", ".ogg", ".opus", ".flac", ".webm", ".mp4"]
+        ):
+            from app.services.voice_service import VoiceTranscriptionAdapter
+            va = VoiceTranscriptionAdapter()
+            return await va.extract_content(attachment, file_path)
 
         # 3. Digital PDF text extraction (PyMuPDF / PyPDF)
         if file_path and file_path.suffix.lower() == ".pdf":

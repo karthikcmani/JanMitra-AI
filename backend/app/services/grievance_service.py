@@ -20,9 +20,41 @@ from app.services.storage_service import LocalFileSystemStorage
 
 ALLOWED_MIME_TYPES = {
     "image/jpeg": [".jpg", ".jpeg"],
+    "image/jpg": [".jpg", ".jpeg"],
     "image/png": [".png"],
     "image/webp": [".webp"],
     "application/pdf": [".pdf"],
+    "audio/wav": [".wav"],
+    "audio/x-wav": [".wav"],
+    "audio/wave": [".wav"],
+    "audio/mpeg": [".mp3"],
+    "audio/mp3": [".mp3"],
+    "audio/mp4": [".m4a", ".mp4", ".aac"],
+    "audio/m4a": [".m4a"],
+    "audio/x-m4a": [".m4a"],
+    "audio/aac": [".aac", ".m4a"],
+    "audio/ogg": [".ogg", ".opus"],
+    "audio/flac": [".flac"],
+    "audio/x-flac": [".flac"],
+    "audio/webm": [".webm"],
+    "video/mp4": [".m4a", ".mp4"],
+    "video/webm": [".webm"],
+}
+
+EXTENSION_TO_MIME = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".pdf": "application/pdf",
+    ".wav": "audio/wav",
+    ".mp3": "audio/mpeg",
+    ".m4a": "audio/mp4",
+    ".aac": "audio/aac",
+    ".ogg": "audio/ogg",
+    ".opus": "audio/ogg",
+    ".flac": "audio/flac",
+    ".webm": "audio/webm",
 }
 
 MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10MB limit
@@ -110,14 +142,17 @@ class GrievanceService:
             )
 
         # 2. MIME & Extension validation
-        mime_type = (file.content_type or "").lower()
+        mime_type = (file.content_type or "").lower().split(";")[0].strip()
         original_filename = file.filename or "uploaded_file"
         file_ext = Path(original_filename).suffix.lower()
+
+        if mime_type in ("", "application/octet-stream") and file_ext in EXTENSION_TO_MIME:
+            mime_type = EXTENSION_TO_MIME[file_ext]
 
         if mime_type not in ALLOWED_MIME_TYPES:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid file type. Supported types: JPEG, PNG, WEBP, PDF.",
+                detail="Invalid file type. Supported types: JPEG, PNG, WEBP, PDF, WAV, MP3, M4A, AAC, OGG, FLAC, WEBM.",
             )
 
         valid_extensions = ALLOWED_MIME_TYPES[mime_type]

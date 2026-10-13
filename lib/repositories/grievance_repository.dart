@@ -26,7 +26,35 @@ class GrievanceRepository {
     return GrievanceModel.fromJson(response.data as Map<String, dynamic>);
   }
 
-  /// Uploads an intake file attachment (Image/PDF) for a draft grievance
+  DioMediaType _resolveMediaType(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+      return DioMediaType('image', 'jpeg');
+    } else if (lower.endsWith('.png')) {
+      return DioMediaType('image', 'png');
+    } else if (lower.endsWith('.webp')) {
+      return DioMediaType('image', 'webp');
+    } else if (lower.endsWith('.pdf')) {
+      return DioMediaType('application', 'pdf');
+    } else if (lower.endsWith('.wav')) {
+      return DioMediaType('audio', 'wav');
+    } else if (lower.endsWith('.mp3')) {
+      return DioMediaType('audio', 'mpeg');
+    } else if (lower.endsWith('.m4a') || lower.endsWith('.mp4')) {
+      return DioMediaType('audio', 'mp4');
+    } else if (lower.endsWith('.aac')) {
+      return DioMediaType('audio', 'aac');
+    } else if (lower.endsWith('.ogg') || lower.endsWith('.opus')) {
+      return DioMediaType('audio', 'ogg');
+    } else if (lower.endsWith('.flac')) {
+      return DioMediaType('audio', 'flac');
+    } else if (lower.endsWith('.webm')) {
+      return DioMediaType('audio', 'webm');
+    }
+    return DioMediaType('application', 'octet-stream');
+  }
+
+  /// Uploads an intake file attachment (Image/PDF/Audio) for a draft grievance
   Future<GrievanceAttachmentModel> uploadAttachment({
     required String grievanceId,
     required String filePath,
@@ -34,7 +62,11 @@ class GrievanceRepository {
     String attachmentType = 'handwritten_petition',
   }) async {
     final formData = FormData.fromMap({
-      'file': await MultipartFile.fromFile(filePath, filename: fileName),
+      'file': await MultipartFile.fromFile(
+        filePath,
+        filename: fileName,
+        contentType: _resolveMediaType(fileName),
+      ),
       'attachment_type': attachmentType,
     });
 

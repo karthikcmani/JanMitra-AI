@@ -257,7 +257,43 @@ async def test_grievance_attachments_flow():
             assert fail_db_res.scalar_one_or_none() is None
         print("Storage failure cleanly prevented DB insertion!")
 
-        print("\nALL PHASE 1C MULTIMODAL INTAKE STORAGE TESTS PASSED 100%!")
+        print("\n--- 12. Testing Live Voice Recording (.m4a & .wav) Upload and STT Extraction ---")
+        voice_draft_res = await client.post(
+            "/api/v1/grievances/intake/draft",
+            json={
+                "title": "Voice Petition Intake: live_voice_petition.m4a",
+                "intake_mode": "voice_stt",
+                "original_language": "ml",
+            },
+            headers=headers_a,
+        )
+        assert voice_draft_res.status_code == 201
+        voice_grievance_id = voice_draft_res.json()["id"]
+
+        # Test .m4a uploaded with application/octet-stream (simulating raw mobile file upload)
+        m4a_bytes = b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom"
+        res_m4a = await client.post(
+            f"/api/v1/grievances/{voice_grievance_id}/attachments",
+            files={"file": ("e2e_mock_test_live_voice.m4a", io.BytesIO(m4a_bytes), "application/octet-stream")},
+            data={"attachment_type": "voice_recording"},
+            headers=headers_a,
+        )
+        assert res_m4a.status_code == 201, f"M4A upload failed: {res_m4a.text}"
+        m4a_att = res_m4a.json()
+        assert m4a_att["mime_type"] == "audio/mp4"
+        assert m4a_att["attachment_type"] == "voice_recording"
+
+        # Trigger extraction on the uploaded voice attachment
+        res_extract = await client.post(
+            f"/api/v1/grievances/{voice_grievance_id}/attachments/{m4a_att['id']}/extract",
+            headers=headers_a,
+        )
+        assert res_extract.status_code == 200, f"Voice extraction failed: {res_extract.text}"
+        extract_data = res_extract.json()
+        assert extract_data["extraction_status"] == "completed"
+        assert extract_data["extracted_text"] is not None
+
+        print("\nALL PHASE 1C MULTIMODAL INTAKE & LIVE VOICE STORAGE TESTS PASSED 100%!")
 
 
 if __name__ == "__main__":

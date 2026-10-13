@@ -383,12 +383,57 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             Expanded(
               child: _buildActionTile(
                 context,
-                title: 'New Grievance',
-                subtitle: 'File a complaint',
-                icon: Icons.add_circle_outline_rounded,
+                title: 'Live Camera Scan',
+                subtitle: 'Snap petition photo',
+                icon: Icons.camera_enhance_rounded,
                 color: AppTheme.primaryBlue,
                 bgColor: const Color(0xFFE0F2FE),
-                onTap: () => context.push('/complaints/new'),
+                onTap: () {
+                  ref.read(grievanceIntakeProvider.notifier).selectIntakeMode(
+                        'ocr_handwritten',
+                        autoLaunchAction: 'live_camera',
+                      );
+                  context.push('/complaints/new');
+                },
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildActionTile(
+                context,
+                title: 'Live Voice Intake',
+                subtitle: 'Record audio complaint',
+                icon: Icons.mic_rounded,
+                color: AppTheme.secondaryTeal,
+                bgColor: const Color(0xFFCCFBF1),
+                onTap: () {
+                  ref.read(grievanceIntakeProvider.notifier).selectIntakeMode(
+                        'voice_stt',
+                        autoLaunchAction: 'live_voice',
+                      );
+                  context.push('/complaints/new');
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionTile(
+                context,
+                title: 'New Grievance',
+                subtitle: 'All intake modes',
+                icon: Icons.add_circle_outline_rounded,
+                color: const Color(0xFF2563EB),
+                bgColor: const Color(0xFFDBEAFE),
+                onTap: () {
+                  ref.read(grievanceIntakeProvider.notifier).selectIntakeMode(
+                        'ocr_handwritten',
+                      );
+                  context.push('/complaints/new');
+                },
               ),
             ),
             const SizedBox(width: 10),
@@ -398,7 +443,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 title: 'My Complaints',
                 subtitle: 'View all submitted',
                 icon: Icons.assignment_outlined,
-                color: AppTheme.secondaryTeal,
+                color: const Color(0xFF0D9488),
                 bgColor: const Color(0xFFCCFBF1),
                 onTap: () => MainCitizenShellController.of(context)?.onSelectTab(1),
               ),

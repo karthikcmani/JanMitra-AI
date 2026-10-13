@@ -1,10 +1,14 @@
+import 'dart:async';
 import 'dart:io';
+import 'package:camera/camera.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
 import '../../providers/grievance_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/constants.dart';
@@ -25,15 +29,103 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
   final _directTextController = TextEditingController();
   final _verifiedTextController = TextEditingController();
 
+  // Live Voice Recording State
+  final AudioRecorder _audioRecorder = AudioRecorder();
+  StreamSubscription<Amplitude>? _amplitudeSub;
+  Timer? _recordingTimer;
+  bool _isRecordingVoice = false;
+  int _recordingSeconds = 0;
+  double _normalizedAmplitude = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkPendingAutoLaunch();
+    });
+  }
+
+  void _checkPendingAutoLaunch() {
+    if (!mounted) return;
+    final state = ref.read(grievanceIntakeProvider);
+    final action = state.autoLaunchAction;
+    if (action != null) {
+      ref.read(grievanceIntakeProvider.notifier).clearAutoLaunchAction();
+      if (action == 'live_camera') {
+        _openLiveCameraViewfinder();
+      } else if (action == 'live_voice') {
+        _startLiveVoiceRecording();
+      }
+    }
+  }
+
   @override
   void dispose() {
+    _recordingTimer?.cancel();
+    _amplitudeSub?.cancel();
+    _audioRecorder.dispose();
     _directTitleController.dispose();
     _directTextController.dispose();
     _verifiedTextController.dispose();
     super.dispose();
   }
 
-  Future<void> _captureFromCamera() async {
+  String _formatDuration(int totalSeconds) {
+    final mins = (totalSeconds ~/ 60).toString().padLeft(2, '0');
+    final secs = (totalSeconds % 60).toString().padLeft(2, '0');
+    return '$mins:$secs';
+  }
+
+  // ===========================================================================
+  // 1. IN-APP LIVE CAMERA VIEWFINDER & OS CAMERA FALLBACK
+  // ===========================================================================
+
+  Future<void> _openLiveCameraViewfinder() async {
+    if (kIsWeb) {
+      await _captureFromSystemCamera();
+      return;
+    }
+
+    try {
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        await _captureFromSystemCamera();
+        return;
+      }
+
+      if (!mounted) return;
+      final XFile? capturedFile = await showModalBottomSheet<XFile?>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Colors.black,
+        builder: (ctx) => _LiveCameraViewfinderModal(
+          cameras: cameras,
+          onFallbackSystemCamera: () async {
+            Navigator.of(ctx).pop(null);
+            await _captureFromSystemCamera();
+          },
+        ),
+      );
+
+      if (capturedFile != null && mounted) {
+        final bytes = await capturedFile.length();
+        final fileName =
+            'live_camera_petition_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        ref.read(grievanceIntakeProvider.notifier).setPickedFile(
+              capturedFile.path,
+              fileName,
+              bytes,
+            );
+        await _triggerExtraction();
+      }
+    } catch (e) {
+      // Fallback to OS camera intent if hardware camera preview fails
+      await _captureFromSystemCamera();
+    }
+  }
+
+  Future<void> _captureFromSystemCamera() async {
     try {
       final picker = ImagePicker();
       final photo = await picker.pickImage(
@@ -44,7 +136,7 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
         preferredCameraDevice: CameraDevice.rear,
       );
 
-      if (photo != null) {
+      if (photo != null && mounted) {
         final bytes = await photo.length();
         final fileName = photo.name.isNotEmpty
             ? photo.name
@@ -54,6 +146,7 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
               fileName,
               bytes,
             );
+        await _triggerExtraction();
       }
     } catch (e) {
       if (mounted) {
@@ -77,7 +170,7 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
         maxHeight: 2048,
       );
 
-      if (image != null) {
+      if (image != null && mounted) {
         final bytes = await image.length();
         final fileName = image.name.isNotEmpty
             ? image.name
@@ -87,6 +180,7 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
               fileName,
               bytes,
             );
+        await _triggerExtraction();
       }
     } catch (e) {
       if (mounted) {
@@ -100,12 +194,127 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
     }
   }
 
+  // ===========================================================================
+  // 2. IN-APP LIVE MICROPHONE AUDIO RECORDER
+  // ===========================================================================
+
+  Future<void> _startLiveVoiceRecording() async {
+    try {
+      final hasPermission = await _audioRecorder.hasPermission();
+      if (!hasPermission) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Microphone permission is required to record voice grievances.',
+              ),
+              backgroundColor: AppTheme.danger,
+            ),
+          );
+        }
+        return;
+      }
+
+      final tempDir = await getTemporaryDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final filePath = '${tempDir.path}/live_voice_petition_$timestamp.m4a';
+
+      const config = RecordConfig(
+        encoder: AudioEncoder.aacLc,
+        bitRate: 128000,
+        sampleRate: 44100,
+      );
+
+      await _audioRecorder.start(config, path: filePath);
+
+      _recordingTimer?.cancel();
+      _amplitudeSub?.cancel();
+
+      setState(() {
+        _isRecordingVoice = true;
+        _recordingSeconds = 0;
+        _normalizedAmplitude = 0.2;
+      });
+
+      _recordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted && _isRecordingVoice) {
+          setState(() {
+            _recordingSeconds++;
+          });
+        }
+      });
+
+      _amplitudeSub = _audioRecorder
+          .onAmplitudeChanged(const Duration(milliseconds: 200))
+          .listen((amp) {
+        if (mounted && _isRecordingVoice) {
+          // amp.current is typically between -60 dB (silent) and 0 dB (loud)
+          final clamped = ((amp.current + 55.0) / 55.0).clamp(0.08, 1.0);
+          setState(() {
+            _normalizedAmplitude = clamped;
+          });
+        }
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Unable to start microphone recording: $e'),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _stopLiveVoiceRecording({bool cancel = false}) async {
+    _recordingTimer?.cancel();
+    _amplitudeSub?.cancel();
+
+    try {
+      final recordedPath = await _audioRecorder.stop();
+      setState(() {
+        _isRecordingVoice = false;
+        _normalizedAmplitude = 0.0;
+      });
+
+      if (cancel || recordedPath == null) {
+        return;
+      }
+
+      final file = File(recordedPath);
+      if (await file.exists()) {
+        final sizeBytes = await file.length();
+        final fileName =
+            'live_voice_petition_${DateTime.now().millisecondsSinceEpoch}.m4a';
+        ref.read(grievanceIntakeProvider.notifier).setPickedFile(
+              file.path,
+              fileName,
+              sizeBytes,
+            );
+        await _triggerExtraction();
+      }
+    } catch (e) {
+      setState(() {
+        _isRecordingVoice = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving voice recording: $e'),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _pickDocument({bool isAudio = false}) async {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: isAudio
-            ? ['wav', 'mp3', 'm4a', 'flac', 'ogg']
+            ? ['wav', 'mp3', 'm4a', 'aac', 'flac', 'ogg', 'opus', 'webm']
             : ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
       );
 
@@ -116,6 +325,9 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
               file.name,
               file.size,
             );
+        if (isAudio) {
+          await _triggerExtraction();
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -227,6 +439,9 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () {
+            if (_isRecordingVoice) {
+              _stopLiveVoiceRecording(cancel: true);
+            }
             ref.read(grievanceIntakeProvider.notifier).reset();
             context.pop();
           },
@@ -255,8 +470,8 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
                     children: [
                       Expanded(
                         child: _buildModeCard(
-                          title: 'Photo / Camera',
-                          subtitle: 'Camera / Gallery / OCR',
+                          title: 'Live Camera / OCR',
+                          subtitle: 'Live Scan / Photo / PDF',
                           icon: Icons.camera_alt_rounded,
                           modeKey: 'ocr_handwritten',
                           activeMode: state.intakeMode,
@@ -277,8 +492,8 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: _buildModeCard(
-                          title: 'Voice Intake',
-                          subtitle: 'Malayalam Audio',
+                          title: 'Live Voice Intake',
+                          subtitle: 'Record Mic / Audio STT',
                           icon: Icons.mic_rounded,
                           modeKey: 'voice_stt',
                           activeMode: state.intakeMode,
@@ -305,7 +520,7 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
                     const SizedBox(height: 16),
                   ],
 
-                  // MODE 1: HANDWRITTEN PETITION / OCR FLOW
+                  // MODE 1: HANDWRITTEN PETITION / LIVE CAMERA OCR FLOW
                   if (state.intakeMode == 'ocr_handwritten') ...[
                     _buildHandwrittenIntakeSection(state, isDark),
                   ],
@@ -315,7 +530,7 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
                     _buildDirectTextSection(state, isDark),
                   ],
 
-                  // MODE 3: VOICE INPUT FLOW
+                  // MODE 3: LIVE VOICE RECORDING & AUDIO STT FLOW
                   if (state.intakeMode == 'voice_stt') ...[
                     _buildVoiceIntakeSection(state, isDark),
                   ],
@@ -339,6 +554,9 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
     final isSelected = modeKey == activeMode;
     return InkWell(
       onTap: () {
+        if (_isRecordingVoice && modeKey != 'voice_stt') {
+          _stopLiveVoiceRecording(cancel: true);
+        }
         ref.read(grievanceIntakeProvider.notifier).selectIntakeMode(modeKey);
       },
       borderRadius: BorderRadius.circular(10),
@@ -394,7 +612,7 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Intake Source Card (Direct Camera / Gallery / PDF)
+        // Intake Source Card (In-App Live Camera Viewfinder + System Camera + Gallery + PDF)
         Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
@@ -424,60 +642,80 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
-                  Icons.camera_alt_rounded,
-                  size: 32,
+                  Icons.document_scanner_rounded,
+                  size: 34,
                   color: AppTheme.primaryBlue,
                 ),
               ),
               const SizedBox(height: 10),
               const Text(
-                'Handwritten Petition Photo Intake',
+                'Live Camera Petition Scanner & Photo Intake',
+                textAlign: TextAlign.center,
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
               const SizedBox(height: 4),
               const Text(
-                'Snap a direct photo of the petition or choose from gallery / PDF',
+                'Use the live in-app camera viewfinder to frame and capture your handwritten or printed petition, or select from Gallery / PDF',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 12, color: Colors.grey),
               ),
               const SizedBox(height: 16),
 
-              // Action Buttons Row: Direct Camera vs Gallery vs PDF
+              // Primary CTA: In-App Live Camera Viewfinder
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _openLiveCameraViewfinder,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryBlue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 2,
+                  ),
+                  icon: const Icon(Icons.camera_enhance_rounded, size: 22),
+                  label: const Text(
+                    'Open Live Camera Scanner (In-App Viewfinder)',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              // Secondary Row: System Camera, Gallery, PDF
               Row(
                 children: [
                   Expanded(
-                    flex: 5,
-                    child: ElevatedButton.icon(
-                      onPressed: _captureFromCamera,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryBlue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 8),
+                    child: OutlinedButton.icon(
+                      onPressed: _captureFromSystemCamera,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                        elevation: 1,
+                        side: BorderSide(color: AppTheme.primaryBlue.withValues(alpha: 0.6)),
                       ),
-                      icon: const Icon(Icons.photo_camera_rounded, size: 20),
+                      icon: const Icon(Icons.photo_camera_outlined, size: 17),
                       label: const Text(
-                        'Take Photo',
-                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                        'OS Camera',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    flex: 4,
                     child: OutlinedButton.icon(
                       onPressed: _pickFromGallery,
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 8),
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(10),
                         ),
                         side: BorderSide(color: AppTheme.primaryBlue.withValues(alpha: 0.6)),
                       ),
-                      icon: const Icon(Icons.photo_library_rounded, size: 18),
+                      icon: const Icon(Icons.photo_library_rounded, size: 17),
                       label: const Text(
                         'Gallery',
                         style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
@@ -486,18 +724,17 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    flex: 3,
                     child: OutlinedButton.icon(
                       onPressed: () => _pickDocument(),
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 6),
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      icon: const Icon(Icons.picture_as_pdf_rounded, size: 18),
+                      icon: const Icon(Icons.picture_as_pdf_rounded, size: 17),
                       label: const Text(
-                        'PDF',
+                        'PDF File',
                         style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
                       ),
                     ),
@@ -549,7 +786,7 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
                                   Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 14),
                                   SizedBox(width: 4),
                                   Text(
-                                    'Ready for OCR',
+                                    'Captured & Ready',
                                     style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                                   ),
                                 ],
@@ -578,7 +815,7 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
                     style: const TextStyle(fontSize: 11),
                   ),
                   trailing: TextButton.icon(
-                    onPressed: _captureFromCamera,
+                    onPressed: _openLiveCameraViewfinder,
                     icon: const Icon(Icons.refresh_rounded, size: 16),
                     label: const Text('Retake', style: TextStyle(fontSize: 12)),
                   ),
@@ -591,7 +828,7 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
           // Upload & Extract Trigger Button
           if (state.extractionStep == IntakeExtractionStep.idle) ...[
             CustomButton(
-              text: 'Upload & Extract Malayalam Text via Cloud Vision OCR',
+              text: 'Upload & Extract Malayalam Text via Multimodal OCR',
               onPressed: _triggerExtraction,
               isLoading: state.isLoading,
             ),
@@ -612,8 +849,8 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
                   Expanded(
                     child: Text(
                       state.extractionStep == IntakeExtractionStep.uploading
-                          ? 'Uploading original petition artifact to server...'
-                          : 'AI Multimodal Intelligence: Transcribing Malayalam handwritten petition...',
+                          ? 'Uploading captured petition image to server...'
+                          : 'AI Multimodal Intelligence: Extracting Malayalam & English text...',
                       style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
                     ),
                   ),
@@ -627,7 +864,6 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
         if (state.extractionStep == IntakeExtractionStep.completed) ...[
           const SizedBox(height: 16),
           if (state.rawExtractedText != null && state.rawExtractedText!.isNotEmpty) ...[
-            // AI/OCR Raw Extracted Text Card
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -677,7 +913,6 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
               ),
             ),
           ] else ...[
-            // Automatic OCR Unavailable / Manual Verification Card
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -694,7 +929,7 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Automatic Text Extraction Temporarily Unavailable',
+                          'Manual Verification Required',
                           style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber.shade900, fontSize: 13),
                         ),
                       ),
@@ -702,13 +937,8 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Automatic text extraction is temporarily unavailable. Please enter or verify the complaint text manually. Your original document is attached.',
+                    'Your captured photo is attached. Please enter or verify the complaint text below.',
                     style: TextStyle(fontSize: 12, height: 1.4, color: Colors.black87),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'ഓട്ടോമാറ്റിക് ടെക്സ്റ്റ് വേർതിരിച്ചെടുക്കൽ താൽക്കാലികമായി ലഭ്യമായിട്ടില്ല. ദയവായി പരാതി വിവരങ്ങൾ താഴെ എഴുതുക / നൽകുക.',
-                    style: TextStyle(fontSize: 12, height: 1.4, color: Colors.grey.shade800),
                   ),
                 ],
               ),
@@ -716,14 +946,13 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
           ],
           const SizedBox(height: 20),
 
-          // Citizen Review & Verification Editable Field
           const Text(
             'Citizen Petition Text Entry / Verification (Required)',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
           ),
           const SizedBox(height: 4),
           const Text(
-            'Please enter or verify the petition text below before confirming.',
+            'Please review or edit the extracted petition text below before confirming.',
             style: TextStyle(fontSize: 12, color: Colors.grey),
           ),
           const SizedBox(height: 8),
@@ -738,7 +967,6 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
           ),
           const SizedBox(height: 20),
 
-          // Explicit Confirmation Button
           CustomButton(
             text: 'Confirm Petition Text & Register Grievance',
             onPressed: _confirmAndSubmitHandwritten,
@@ -788,41 +1016,213 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Audio File Selection Box
+        // Live Voice Recording & Audio File Upload Card
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             color: isDark ? AppTheme.darkCard : Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: _isRecordingVoice
+                  ? AppTheme.danger
+                  : AppTheme.secondaryTeal.withValues(alpha: 0.4),
+              width: _isRecordingVoice ? 2.0 : 1.2,
+            ),
+            boxShadow: [
+              if (_isRecordingVoice)
+                BoxShadow(
+                  color: AppTheme.danger.withValues(alpha: 0.15),
+                  blurRadius: 14,
+                  offset: const Offset(0, 4),
+                ),
+            ],
           ),
           child: Column(
             children: [
-              const Icon(Icons.mic_rounded, size: 40, color: AppTheme.secondaryTeal),
-              const SizedBox(height: 8),
-              const Text(
-                'Upload Malayalam Voice Recording',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Supported audio formats: WAV, MP3, M4A, FLAC, OGG',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: () => _pickDocument(isAudio: true),
-                icon: const Icon(Icons.graphic_eq_rounded),
-                label: Text(
-                  state.selectedFileName ?? 'Browse / Select Audio File',
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: _isRecordingVoice
+                      ? AppTheme.danger.withValues(alpha: 0.15)
+                      : AppTheme.secondaryTeal.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  _isRecordingVoice ? Icons.mic_none_rounded : Icons.mic_rounded,
+                  size: 38,
+                  color: _isRecordingVoice ? AppTheme.danger : AppTheme.secondaryTeal,
                 ),
               ),
+              const SizedBox(height: 10),
+              Text(
+                _isRecordingVoice
+                    ? 'Recording Live Voice Grievance...'
+                    : 'Live Malayalam & English Voice Intake',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: _isRecordingVoice ? AppTheme.danger : null,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _isRecordingVoice
+                    ? 'Speak clearly in Malayalam or English. Tap "Stop & Transcribe" when finished.'
+                    : 'Record your complaint directly using your microphone or upload an existing audio recording',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+              const SizedBox(height: 16),
+
+              if (_isRecordingVoice) ...[
+                // Live Recording Timer + Voice Level Meter
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.danger.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: const BoxDecoration(
+                              color: AppTheme.danger,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'LIVE • ${_formatDuration(_recordingSeconds)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 18,
+                              color: AppTheme.danger,
+                              letterSpacing: 1.1,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: LinearProgressIndicator(
+                          value: _normalizedAmplitude,
+                          minHeight: 8,
+                          backgroundColor: Colors.grey.shade300,
+                          valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.danger),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Microphone Input Level',
+                        style: TextStyle(fontSize: 10, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: ElevatedButton.icon(
+                        onPressed: () => _stopLiveVoiceRecording(cancel: false),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.success,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        icon: const Icon(Icons.stop_circle_rounded, size: 22),
+                        label: const Text(
+                          'Stop & Auto-Transcribe',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _stopLiveVoiceRecording(cancel: true),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.danger,
+                          side: const BorderSide(color: AppTheme.danger),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                        label: const Text(
+                          'Cancel',
+                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ] else ...[
+                // Primary Live Microphone Recording Button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _startLiveVoiceRecording,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.secondaryTeal,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 2,
+                    ),
+                    icon: const Icon(Icons.mic_rounded, size: 22),
+                    label: const Text(
+                      'Start Live Voice Recording (Malayalam / English)',
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // Secondary Option: Upload Audio File
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _pickDocument(isAudio: true),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      side: BorderSide(color: AppTheme.secondaryTeal.withValues(alpha: 0.6)),
+                    ),
+                    icon: const Icon(Icons.upload_file_rounded, size: 18),
+                    label: Text(
+                      state.selectedFileName != null
+                          ? 'Change Audio File (${state.selectedFileName})'
+                          : 'Or Browse / Upload Audio File (WAV, MP3, M4A, OGG)',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
         const SizedBox(height: 16),
 
-        if (state.selectedFileName != null) ...[
+        if (state.selectedFileName != null && !_isRecordingVoice) ...[
           // Audio File Metadata Card
           Card(
             elevation: 1,
@@ -831,11 +1231,18 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
               leading: const Icon(Icons.audio_file_rounded, color: AppTheme.secondaryTeal, size: 32),
               title: Text(
                 state.selectedFileName!,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               ),
               subtitle: Text(
-                'Voice Audio Artifact • (${((state.selectedFileSizeBytes ?? 0) / 1024).toStringAsFixed(1)} KB)',
+                'Voice Audio Artifact • ${((state.selectedFileSizeBytes ?? 0) / 1024).toStringAsFixed(1)} KB',
                 style: const TextStyle(fontSize: 11),
+              ),
+              trailing: TextButton.icon(
+                onPressed: _triggerExtraction,
+                icon: const Icon(Icons.sync_rounded, size: 16),
+                label: const Text('Re-Transcribe', style: TextStyle(fontSize: 12)),
               ),
             ),
           ),
@@ -844,7 +1251,7 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
           // Upload & Transcribe Trigger Button
           if (state.extractionStep == IntakeExtractionStep.idle) ...[
             CustomButton(
-              text: 'Upload & Transcribe Malayalam Audio via Speech-to-Text',
+              text: 'Transcribe Malayalam / English Audio via AI STT',
               onPressed: _triggerExtraction,
               isLoading: state.isLoading,
             ),
@@ -864,7 +1271,7 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
                   SizedBox(width: 16),
                   Expanded(
                     child: Text(
-                      'Processing Malayalam Speech-to-Text transcription via Multimodal Gemini STT / Whisper Engine...',
+                      'Transcribing Malayalam & English speech via High-Speed Whisper / Gemini Multimodal Audio STT...',
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
                     ),
                   ),
@@ -888,10 +1295,14 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 6,
                     children: [
                       const Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(Icons.record_voice_over_rounded, size: 18, color: AppTheme.secondaryTeal),
                           SizedBox(width: 6),
@@ -908,7 +1319,7 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
-                          'Engine: ${state.extractionResult?.engineName ?? "multimodal_stt_v1"}',
+                          'Engine: ${state.extractionResult?.engineName ?? "multimodal_stt_v2"}',
                           style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                         ),
                       ),
@@ -939,7 +1350,7 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Audio Transcription Needs Verification',
+                          'Audio Attached — Please Verify Text Below',
                           style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange, fontSize: 13),
                         ),
                       ),
@@ -947,8 +1358,8 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Automatic STT could not fully transcribe the audio stream. Please type or verify your petition details in the box below.',
-                    style: TextStyle(fontSize: 12, height: 1.4),
+                    'Your voice recording is attached. Please review or type your petition details in the box below before submitting.',
+                    style: TextStyle(fontSize: 12, height: 1.4, color: Colors.black87),
                   ),
                 ],
               ),
@@ -987,6 +1398,361 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
           ),
         ],
       ],
+    );
+  }
+}
+
+// =============================================================================
+// IN-APP LIVE CAMERA VIEWFINDER MODAL WIDGET
+// =============================================================================
+
+class _LiveCameraViewfinderModal extends StatefulWidget {
+  final List<CameraDescription> cameras;
+  final VoidCallback onFallbackSystemCamera;
+
+  const _LiveCameraViewfinderModal({
+    required this.cameras,
+    required this.onFallbackSystemCamera,
+  });
+
+  @override
+  State<_LiveCameraViewfinderModal> createState() =>
+      _LiveCameraViewfinderModalState();
+}
+
+class _LiveCameraViewfinderModalState extends State<_LiveCameraViewfinderModal> {
+  CameraController? _controller;
+  int _selectedCameraIdx = 0;
+  bool _isInitializing = true;
+  bool _isTakingPicture = false;
+  FlashMode _flashMode = FlashMode.off;
+  String? _cameraError;
+
+  @override
+  void initState() {
+    super.initState();
+    // Prefer rear camera by default
+    final rearIndex = widget.cameras.indexWhere(
+      (c) => c.lensDirection == CameraLensDirection.back,
+    );
+    _selectedCameraIdx = rearIndex != -1 ? rearIndex : 0;
+    _initCamera(_selectedCameraIdx);
+  }
+
+  Future<void> _initCamera(int index) async {
+    setState(() {
+      _isInitializing = true;
+      _cameraError = null;
+    });
+
+    final prevController = _controller;
+    if (prevController != null) {
+      await prevController.dispose();
+    }
+
+    final cameraDesc = widget.cameras[index];
+    final controller = CameraController(
+      cameraDesc,
+      ResolutionPreset.high,
+      enableAudio: false,
+      imageFormatGroup: ImageFormatGroup.jpeg,
+    );
+
+    _controller = controller;
+
+    try {
+      await controller.initialize();
+      try {
+        await controller.setFlashMode(_flashMode);
+      } catch (_) {}
+      if (mounted) {
+        setState(() {
+          _isInitializing = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isInitializing = false;
+          _cameraError = e.toString();
+        });
+      }
+    }
+  }
+
+  Future<void> _toggleFlash() async {
+    if (_controller == null || !_controller!.value.isInitialized) return;
+    final nextMode = _flashMode == FlashMode.off
+        ? FlashMode.torch
+        : (_flashMode == FlashMode.torch ? FlashMode.auto : FlashMode.off);
+    try {
+      await _controller!.setFlashMode(nextMode);
+      setState(() {
+        _flashMode = nextMode;
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _switchCamera() async {
+    if (widget.cameras.length < 2) return;
+    final nextIdx = (_selectedCameraIdx + 1) % widget.cameras.length;
+    _selectedCameraIdx = nextIdx;
+    await _initCamera(nextIdx);
+  }
+
+  Future<void> _snapPhoto() async {
+    final controller = _controller;
+    if (controller == null ||
+        !controller.value.isInitialized ||
+        _isTakingPicture) {
+      return;
+    }
+
+    setState(() {
+      _isTakingPicture = true;
+    });
+
+    try {
+      final XFile photo = await controller.takePicture();
+      if (mounted) {
+        Navigator.of(context).pop(photo);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isTakingPicture = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Capture failed: $e'),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.92,
+      child: Column(
+        children: [
+          // Top Camera Control Bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            color: Colors.black,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(null),
+                  icon: const Icon(Icons.close_rounded, color: Colors.white, size: 26),
+                  tooltip: 'Close Scanner',
+                ),
+                const Row(
+                  children: [
+                    Icon(Icons.document_scanner_rounded, color: Colors.lightBlueAccent, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'Live Petition Scanner',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: [
+                    IconButton(
+                      onPressed: _toggleFlash,
+                      icon: Icon(
+                        _flashMode == FlashMode.torch
+                            ? Icons.highlight_rounded
+                            : (_flashMode == FlashMode.auto
+                                ? Icons.flash_auto_rounded
+                                : Icons.flash_off_rounded),
+                        color: _flashMode == FlashMode.off
+                            ? Colors.white70
+                            : Colors.amberAccent,
+                      ),
+                      tooltip: 'Toggle Flash',
+                    ),
+                    if (widget.cameras.length > 1)
+                      IconButton(
+                        onPressed: _switchCamera,
+                        icon: const Icon(
+                          Icons.cameraswitch_rounded,
+                          color: Colors.white,
+                        ),
+                        tooltip: 'Switch Camera',
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Live Camera Viewfinder Area
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              color: Colors.black,
+              child: _isInitializing
+                  ? const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(color: Colors.white),
+                          SizedBox(height: 12),
+                          Text(
+                            'Starting live camera viewfinder...',
+                            style: TextStyle(color: Colors.white70, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    )
+                  : (_cameraError != null ||
+                          _controller == null ||
+                          !_controller!.value.isInitialized)
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24.0),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.camera_alt_outlined,
+                                  color: Colors.white54,
+                                  size: 48,
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'Live preview unavailable on this device (${_cameraError ?? "Camera busy"}).',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(color: Colors.white70),
+                                ),
+                                const SizedBox(height: 16),
+                                ElevatedButton.icon(
+                                  onPressed: widget.onFallbackSystemCamera,
+                                  icon: const Icon(Icons.photo_camera_rounded),
+                                  label: const Text('Use System Camera App'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Center(
+                              child: CameraPreview(_controller!),
+                            ),
+                            // Petition Alignment Guide Frame Overlay
+                            IgnorePointer(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 28,
+                                  vertical: 36,
+                                ),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: Colors.lightBlueAccent.withValues(alpha: 0.8),
+                                      width: 2.0,
+                                    ),
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: Align(
+                                    alignment: Alignment.topCenter,
+                                    child: Container(
+                                      margin: const EdgeInsets.only(top: 12),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withValues(alpha: 0.65),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: const Text(
+                                        'Align handwritten or printed petition within frame',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+            ),
+          ),
+
+          // Bottom Shutter Bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            color: Colors.black,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                TextButton.icon(
+                  onPressed: widget.onFallbackSystemCamera,
+                  icon: const Icon(Icons.camera_outlined, color: Colors.white70, size: 18),
+                  label: const Text(
+                    'OS Camera',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ),
+                GestureDetector(
+                  onTap: _isTakingPicture ? null : _snapPhoto,
+                  child: Container(
+                    width: 74,
+                    height: 74,
+                    padding: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 3.5),
+                    ),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: _isTakingPicture ? Colors.grey : Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                      child: _isTakingPicture
+                          ? const Padding(
+                              padding: EdgeInsets.all(18.0),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 3,
+                                color: AppTheme.primaryBlue,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.camera_alt_rounded,
+                              color: AppTheme.primaryBlue,
+                              size: 32,
+                            ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 88),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

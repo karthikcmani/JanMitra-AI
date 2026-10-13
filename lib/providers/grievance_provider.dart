@@ -37,6 +37,7 @@ class GrievanceIntakeState {
   final String? errorMessage;
   final bool isConfirmed;
   final bool isLoading;
+  final String? autoLaunchAction; // 'live_camera' or 'live_voice'
 
   const GrievanceIntakeState({
     this.intakeMode = 'ocr_handwritten',
@@ -52,6 +53,7 @@ class GrievanceIntakeState {
     this.errorMessage,
     this.isConfirmed = false,
     this.isLoading = false,
+    this.autoLaunchAction,
   });
 
   GrievanceIntakeState copyWith({
@@ -68,6 +70,8 @@ class GrievanceIntakeState {
     String? errorMessage,
     bool? isConfirmed,
     bool? isLoading,
+    String? autoLaunchAction,
+    bool clearAutoLaunch = false,
   }) {
     return GrievanceIntakeState(
       intakeMode: intakeMode ?? this.intakeMode,
@@ -83,6 +87,7 @@ class GrievanceIntakeState {
       errorMessage: errorMessage,
       isConfirmed: isConfirmed ?? this.isConfirmed,
       isLoading: isLoading ?? this.isLoading,
+      autoLaunchAction: clearAutoLaunch ? null : (autoLaunchAction ?? this.autoLaunchAction),
     );
   }
 }
@@ -98,8 +103,17 @@ class GrievanceIntakeNotifier extends StateNotifier<GrievanceIntakeState> {
 
   GrievanceIntakeNotifier(this._repository) : super(const GrievanceIntakeState());
 
-  void selectIntakeMode(String mode) {
-    state = state.copyWith(intakeMode: mode, errorMessage: null);
+  void selectIntakeMode(String mode, {String? autoLaunchAction}) {
+    state = state.copyWith(
+      intakeMode: mode,
+      errorMessage: null,
+      autoLaunchAction: autoLaunchAction,
+      clearAutoLaunch: autoLaunchAction == null,
+    );
+  }
+
+  void clearAutoLaunchAction() {
+    state = state.copyWith(clearAutoLaunch: true);
   }
 
   void setPickedFile(String filePath, String fileName, int sizeBytes) {
@@ -137,6 +151,9 @@ class GrievanceIntakeNotifier extends StateNotifier<GrievanceIntakeState> {
         intakeMode: isVoice ? 'voice_stt' : 'ocr_handwritten',
         originalLanguage: 'ml',
       );
+
+      // Immediately persist the draft in state so citizen verification always has a valid grievance ID
+      state = state.copyWith(grievance: draft);
 
       // Step 2: Upload File Attachment
       final attachment = await _repository.uploadAttachment(
@@ -194,17 +211,23 @@ class GrievanceIntakeNotifier extends StateNotifier<GrievanceIntakeState> {
         );
       }
     } on DioException catch (e) {
+      final isVoice = state.intakeMode == 'voice_stt';
       final detail = e.response?.data?['detail']?.toString() ?? e.message;
       state = state.copyWith(
         extractionStep: IntakeExtractionStep.completed,
         isLoading: false,
-        errorMessage: 'Note: Automatic OCR unavailable ($detail). Please type/verify the complaint text below.',
+        errorMessage: isVoice
+            ? 'Note: Automatic voice transcription unavailable ($detail). Please verify or type the complaint text below.'
+            : 'Note: Automatic OCR unavailable ($detail). Please type/verify the complaint text below.',
       );
     } catch (e) {
+      final isVoice = state.intakeMode == 'voice_stt';
       state = state.copyWith(
         extractionStep: IntakeExtractionStep.completed,
         isLoading: false,
-        errorMessage: 'Note: Automatic OCR unavailable. Please type/verify the complaint text below.',
+        errorMessage: isVoice
+            ? 'Note: Automatic voice transcription unavailable. Please verify or type the complaint text below.'
+            : 'Note: Automatic OCR unavailable. Please type/verify the complaint text below.',
       );
     }
   }
@@ -219,16 +242,24 @@ class GrievanceIntakeNotifier extends StateNotifier<GrievanceIntakeState> {
       return;
     }
 
-    if (state.grievance == null) {
-      state = state.copyWith(errorMessage: 'No active grievance draft found.');
-      return;
-    }
-
     try {
       state = state.copyWith(isLoading: true, errorMessage: null);
 
+      var activeGrievance = state.grievance;
+      if (activeGrievance == null) {
+        final isVoice = state.intakeMode == 'voice_stt';
+        activeGrievance = await _repository.createDraft(
+          title: isVoice
+              ? 'Voice Petition Intake: ${state.selectedFileName ?? "Live Audio"}'
+              : 'Handwritten Petition Intake: ${state.selectedFileName ?? "Camera Scan"}',
+          intakeMode: isVoice ? 'voice_stt' : 'ocr_handwritten',
+          originalLanguage: 'ml',
+        );
+        state = state.copyWith(grievance: activeGrievance);
+      }
+
       final confirmed = await _repository.verifyGrievance(
-        grievanceId: state.grievance!.id,
+        grievanceId: activeGrievance.id,
         verifiedText: state.verifiedText.trim(),
         attachmentId: state.attachment?.id,
       );
