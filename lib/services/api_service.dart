@@ -80,8 +80,11 @@ class ApiService {
                   errStr.contains('Connection reset') ||
                   errStr.contains('Broken pipe'));
 
+          final statusCode = error.response?.statusCode;
           final retryCount = error.requestOptions.extra['retry_count'] as int? ?? 0;
-          if (isTransientAbort && retryCount < 1) {
+
+          // 1. Retry transient network socket aborts (VoLTE/cellular resets)
+          if (isTransientAbort && retryCount < 2) {
             error.requestOptions.extra['retry_count'] = retryCount + 1;
             debugPrint('--> [DIO RETRY] Retrying request after transient abort: ${error.requestOptions.uri}');
             await Future.delayed(const Duration(milliseconds: 1200));
@@ -95,8 +98,33 @@ class ApiService {
             }
           }
 
+          // 2. Retry HTTP 429 (Rate Limit) and HTTP 503 (Render Free Tier Cold Start)
+          if ((statusCode == 429 || statusCode == 503) && retryCount < 2) {
+            error.requestOptions.extra['retry_count'] = retryCount + 1;
+            final delayMs = statusCode == 429 ? 1500 : 2500;
+            debugPrint('--> [DIO RETRY] Server status $statusCode, waiting ${delayMs}ms before retry ($retryCount/2): ${error.requestOptions.uri}');
+            await Future.delayed(Duration(milliseconds: delayMs));
+            try {
+              final response = await _dio.fetch(error.requestOptions);
+              return handler.resolve(response);
+            } catch (retryError) {
+              if (retryError is DioException) {
+                return handler.next(retryError);
+              }
+            }
+          }
+
+          // 3. User-friendly error message resolution
           String customMsg = error.message ?? 'Unknown connection error';
-          if (errStr.contains('Software caused connection abort')) {
+          if (error.response?.data is Map && error.response?.data['detail'] != null) {
+            customMsg = error.response?.data['detail'].toString() ?? customMsg;
+          } else if (statusCode == 429) {
+            customMsg = 'Server is currently handling peak requests. Please tap Retry in a moment.';
+          } else if (statusCode == 503) {
+            customMsg = 'JanMitra cloud service is initializing. Please tap Retry in a few seconds.';
+          } else if (statusCode == 500) {
+            customMsg = 'Server encountered an issue processing request. Please retry.';
+          } else if (errStr.contains('Software caused connection abort')) {
             customMsg =
                 'Mobile network interrupted. Please check your signal and tap to retry.';
           } else if (error.type == DioExceptionType.connectionTimeout) {
@@ -220,4 +248,12 @@ class ApiService {
       options: options,
     );
   }
+}
+
+/// Formats an error into a user-friendly message, unwrapping DioException.
+String formatApiErrorMessage(Object err) {
+  if (err is DioException) {
+    return err.message ?? 'Server connection error. Please tap Retry.';
+  }
+  return err.toString();
 }

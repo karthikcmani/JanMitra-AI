@@ -5,6 +5,7 @@ import '../../models/grievance_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/grievance_provider.dart';
 import '../../repositories/notification_repository.dart';
+import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/constants.dart';
 import '../../widgets/stat_card.dart';
@@ -567,7 +568,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
               error: (err, _) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16.0),
-                child: Text('Error: ${err.toString()}', style: const TextStyle(color: AppTheme.danger)),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        formatApiErrorMessage(err),
+                        style: const TextStyle(color: AppTheme.danger, fontSize: 13),
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => ref.invalidate(myGrievancesProvider),
+                      icon: const Icon(Icons.refresh, size: 16),
+                      label: const Text('Retry'),
+                    ),
+                  ],
+                ),
               ),
               data: (list) {
                 final recent = list.take(3).toList();

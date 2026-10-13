@@ -8,12 +8,7 @@ import '../../theme/app_theme.dart';
 
 final officialGrievanceDetailProvider = FutureProvider.family.autoDispose<GrievanceModel, String>((ref, id) async {
   final repo = ref.watch(officialRepositoryProvider);
-  final results = await repo.searchGrievances(query: id);
-  if (results.isNotEmpty) {
-    return results.firstWhere((g) => g.id == id || g.grievanceNumber == id, orElse: () => results.first);
-  }
-  final all = await repo.searchGrievances();
-  return all.firstWhere((g) => g.id == id || g.grievanceNumber == id, orElse: () => throw Exception('Grievance not found'));
+  return await repo.getGrievanceById(id);
 });
 
 class OfficialGrievanceDetailScreen extends ConsumerStatefulWidget {
@@ -32,6 +27,7 @@ class _OfficialGrievanceDetailScreenState extends ConsumerState<OfficialGrievanc
   String _selectedDept = 'Kerala Water Authority (KWA)';
   String _selectedStatus = 'forwarded';
   bool _isSubmitting = false;
+  String? _initializedGrievanceId;
 
   static const _allowedDepts = [
     'Kerala Water Authority (KWA)',
@@ -49,6 +45,9 @@ class _OfficialGrievanceDetailScreenState extends ConsumerState<OfficialGrievanc
   }
 
   void _initFormFields(GrievanceModel g) {
+    if (_initializedGrievanceId == g.id) return;
+    _initializedGrievanceId = g.id;
+
     final currentDept = g.departmentId ?? g.predictedDepartment ?? '';
     if (_allowedDepts.contains(currentDept)) {
       _selectedDept = currentDept;
@@ -64,8 +63,11 @@ class _OfficialGrievanceDetailScreenState extends ConsumerState<OfficialGrievanc
       _selectedDept = 'Revenue & General Administration';
     }
 
-    if (['forwarded', 'clarification_required', 'under_processing', 'resolved', 'closed'].contains(g.status.toLowerCase())) {
-      _selectedStatus = g.status.toLowerCase();
+    final rawStatus = g.status.toLowerCase();
+    if (['forwarded', 'clarification_required', 'under_processing', 'resolved', 'closed'].contains(rawStatus)) {
+      _selectedStatus = rawStatus;
+    } else {
+      _selectedStatus = 'forwarded';
     }
   }
 
@@ -81,6 +83,7 @@ class _OfficialGrievanceDetailScreenState extends ConsumerState<OfficialGrievanc
         question: _questionController.text.trim().isNotEmpty ? _questionController.text.trim() : null,
       );
 
+      _initializedGrievanceId = null;
       ref.invalidate(officialGrievanceDetailProvider(widget.grievanceId));
       ref.invalidate(officialSummaryProvider);
       ref.invalidate(attentionQueueProvider);
@@ -670,6 +673,7 @@ class _OfficialGrievanceDetailScreenState extends ConsumerState<OfficialGrievanc
             const Text('Select Department / Authority:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
             const SizedBox(height: 4),
             DropdownButtonFormField<String>(
+              key: ValueKey('dept_$_selectedDept'),
               initialValue: _selectedDept,
               decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
               items: _allowedDepts.map((d) => DropdownMenuItem(value: d, child: Text(d, style: const TextStyle(fontSize: 12)))).toList(),
@@ -682,13 +686,15 @@ class _OfficialGrievanceDetailScreenState extends ConsumerState<OfficialGrievanc
             const Text('Update Grievance Status:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
             const SizedBox(height: 4),
             DropdownButtonFormField<String>(
+              key: ValueKey('status_$_selectedStatus'),
               initialValue: _selectedStatus,
               decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
               items: const [
                 DropdownMenuItem(value: 'forwarded', child: Text('Approve & Forward to Department')),
-                DropdownMenuItem(value: 'clarification_required', child: Text('Request Citizen Clarification')),
                 DropdownMenuItem(value: 'under_processing', child: Text('Mark Under Active Processing')),
+                DropdownMenuItem(value: 'clarification_required', child: Text('Request Citizen Clarification')),
                 DropdownMenuItem(value: 'resolved', child: Text('Mark Resolved & Closed')),
+                DropdownMenuItem(value: 'closed', child: Text('Administrative Close')),
               ],
               onChanged: (val) {
                 if (val != null) setState(() => _selectedStatus = val);

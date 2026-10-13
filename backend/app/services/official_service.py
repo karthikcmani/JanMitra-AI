@@ -192,171 +192,175 @@ class OfficialService:
             legal_explanation=decision.legal_explanation,
         )
 
+    async def get_official_grievance_by_id(self, grievance_id: str) -> Optional[OfficialGrievanceDetailResponse]:
+        res = await self.db.execute(select(Grievance).where(Grievance.id == grievance_id))
+        g = res.scalar_one_or_none()
+        if not g:
+            return None
+        return await self._build_official_detail_response(g)
+
     async def get_all_official_grievances(self) -> List[OfficialGrievanceDetailResponse]:
         stmt = select(Grievance).order_by(Grievance.created_at.desc())
         res = await self.db.execute(stmt)
         grievances = res.scalars().all()
+        return [await self._build_official_detail_response(g) for g in grievances]
 
-        results = []
-        for g in grievances:
-            # Fetch citizen user details
-            citizen_res = await self.db.execute(select(User).where(User.id == g.citizen_id))
-            citizen = citizen_res.scalar_one_or_none()
+    async def _build_official_detail_response(self, g: Grievance) -> OfficialGrievanceDetailResponse:
+        # Fetch citizen user details
+        citizen_res = await self.db.execute(select(User).where(User.id == g.citizen_id))
+        citizen = citizen_res.scalar_one_or_none()
 
-            assigned_off_name = None
-            if getattr(g, "assigned_official_id", None):
-                off_res = await self.db.execute(select(User).where(User.id == g.assigned_official_id))
-                off_user = off_res.scalar_one_or_none()
-                if off_user:
-                    assigned_off_name = off_user.full_name
+        assigned_off_name = None
+        if getattr(g, "assigned_official_id", None):
+            off_res = await self.db.execute(select(User).where(User.id == g.assigned_official_id))
+            off_user = off_res.scalar_one_or_none()
+            if off_user:
+                assigned_off_name = off_user.full_name
 
-            # Fetch attachments
-            atts_res = await self.db.execute(
-                select(GrievanceAttachment).where(GrievanceAttachment.grievance_id == g.id)
-            )
-            attachments = atts_res.scalars().all()
+        # Fetch attachments
+        atts_res = await self.db.execute(
+            select(GrievanceAttachment).where(GrievanceAttachment.grievance_id == g.id)
+        )
+        attachments = atts_res.scalars().all()
 
-            # Aggregate raw OCR text
-            raw_ocr = "\n".join(
-                [a.raw_extracted_text for a in attachments if a.raw_extracted_text]
-            )
+        # Aggregate raw OCR text
+        raw_ocr = "\n".join(
+            [a.raw_extracted_text for a in attachments if a.raw_extracted_text]
+        )
 
-            # Fetch analysis
-            analysis_res = await self.db.execute(
-                select(GrievanceAnalysis).where(GrievanceAnalysis.grievance_id == g.id)
-            )
-            analysis = analysis_res.scalar_one_or_none()
+        # Fetch analysis
+        analysis_res = await self.db.execute(
+            select(GrievanceAnalysis).where(GrievanceAnalysis.grievance_id == g.id)
+        )
+        analysis = analysis_res.scalar_one_or_none()
 
-            # Fetch audit logs
-            logs_res = await self.db.execute(
-                select(GrievanceAuditLog)
-                .where(GrievanceAuditLog.grievance_id == g.id)
-                .order_by(GrievanceAuditLog.created_at.asc())
-            )
-            audit_logs = logs_res.scalars().all()
+        # Fetch audit logs
+        logs_res = await self.db.execute(
+            select(GrievanceAuditLog)
+            .where(GrievanceAuditLog.grievance_id == g.id)
+            .order_by(GrievanceAuditLog.created_at.asc())
+        )
+        audit_logs = logs_res.scalars().all()
 
-            from app.services.sequential_routing_engine import SequentialRoutingEngine
+        from app.services.sequential_routing_engine import SequentialRoutingEngine
+        eval_text = (g.title or "") + " " + (g.description or "") + " " + (raw_ocr or g.original_text or "")
+        seq_dec = SequentialRoutingEngine.evaluate(eval_text)
+
+        dept_suggestion = g.department_id or (analysis.predicted_category if (analysis and analysis.predicted_category) else seq_dec.department_name)
+        if not dept_suggestion or not str(dept_suggestion).strip():
+            dept_suggestion = seq_dec.department_name
+
+        statutory_info = None
+        if analysis and analysis.legal_grounding_references:
+            statutory_info = analysis.legal_grounding_references.get("statutory_act")
+        if not statutory_info or statutory_info == "Kerala Public Services Act, 2012":
+            statutory_info = seq_dec.statutory_act
+
+        explanation_text = analysis.ai_explanation if (analysis and analysis.ai_explanation) else seq_dec.legal_explanation
+        if not explanation_text or explanation_text == "Assigned based on natural language petition context.":
+            explanation_text = seq_dec.legal_explanation
+
+        confidence_val = float(analysis.legal_grounding_references.get("confidence_score", seq_dec.confidence_score)) if (analysis and analysis.legal_grounding_references) else seq_dec.confidence_score
+
+        missing_info = "None identified."
+        if g.status == GrievanceStatus.CLARIFICATION_REQUIRED:
+            missing_info = "Official requested additional evidence/land details from citizen."
+        elif not raw_ocr and g.intake_mode == "ocr_handwritten":
+            missing_info = "Petition scan attached but OCR text not yet extracted."
+
+        next_step = "Review petition evidence and assign to Executive Engineer."
+        if g.status == GrievanceStatus.CLARIFICATION_REQUIRED:
+            next_step = "Awaiting citizen clarification response."
+        elif g.status == GrievanceStatus.FORWARDED:
+            next_step = "Track departmental resolution progress with assigned officer."
+
+        from app.services.priority_engine import PriorityIntelligenceEngine
+        p_score = getattr(g, "priority_score", None)
+        p_breakdown = None
+        sla_days = 7
+
+        if analysis and analysis.extracted_entities and isinstance(analysis.extracted_entities, dict):
+            p_eval = analysis.extracted_entities.get("priority_evaluation")
+            if p_eval:
+                p_score = p_eval.get("priority_score", p_score or 50)
+                p_breakdown = p_eval.get("factors")
+                sla_days = p_eval.get("sla_target_days", 7)
+
+        if p_score is None:
             eval_text = (g.title or "") + " " + (g.description or "") + " " + (raw_ocr or g.original_text or "")
-            seq_dec = SequentialRoutingEngine.evaluate(eval_text)
+            p_res = PriorityIntelligenceEngine.evaluate(eval_text, department=dept_suggestion)
+            p_score = p_res.priority_score
+            p_breakdown = p_res.factors
+            sla_days = p_res.sla_target_days
 
-            dept_suggestion = g.department_id or (analysis.predicted_category if (analysis and analysis.predicted_category) else seq_dec.department_name)
-            if not dept_suggestion or not str(dept_suggestion).strip():
-                dept_suggestion = seq_dec.department_name
+        decision_panel = AIDecisionSupportPanel(
+            suggested_department=dept_suggestion,
+            priority=g.priority,
+            priority_score=p_score,
+            priority_breakdown=p_breakdown,
+            sla_target_days=sla_days,
+            reasoning=explanation_text,
+            key_facts=[
+                f"Category: {g.category or 'General'}",
+                f"Language: {g.original_language}",
+                f"Priority Score: {p_score}/100 (SLA: {sla_days} days)",
+            ],
+            statutory_relevance=statutory_info,
+            missing_information=missing_info,
+            suggested_next_step=next_step,
+            confidence_score=confidence_val,
+        )
 
-            statutory_info = None
-            if analysis and analysis.legal_grounding_references:
-                statutory_info = analysis.legal_grounding_references.get("statutory_act")
-            if not statutory_info or statutory_info == "Kerala Public Services Act, 2012":
-                statutory_info = seq_dec.statutory_act
-
-            explanation_text = analysis.ai_explanation if (analysis and analysis.ai_explanation) else seq_dec.legal_explanation
-            if not explanation_text or explanation_text == "Assigned based on natural language petition context.":
-                explanation_text = seq_dec.legal_explanation
-
-            confidence_val = float(analysis.legal_grounding_references.get("confidence_score", seq_dec.confidence_score)) if (analysis and analysis.legal_grounding_references) else seq_dec.confidence_score
-
-            missing_info = "None identified."
-            if g.status == GrievanceStatus.CLARIFICATION_REQUIRED:
-                missing_info = "Official requested additional evidence/land details from citizen."
-            elif not raw_ocr and g.intake_mode == "ocr_handwritten":
-                missing_info = "Petition scan attached but OCR text not yet extracted."
-
-            next_step = "Review petition evidence and assign to Executive Engineer."
-            if g.status == GrievanceStatus.CLARIFICATION_REQUIRED:
-                next_step = "Awaiting citizen clarification response."
-            elif g.status == GrievanceStatus.FORWARDED:
-                next_step = "Track departmental resolution progress with assigned officer."
-
-            from app.services.priority_engine import PriorityIntelligenceEngine
-            p_score = getattr(g, "priority_score", None)
-            p_breakdown = None
-            sla_days = 7
-
-            if analysis and analysis.extracted_entities and isinstance(analysis.extracted_entities, dict):
-                p_eval = analysis.extracted_entities.get("priority_evaluation")
-                if p_eval:
-                    p_score = p_eval.get("priority_score", p_score or 50)
-                    p_breakdown = p_eval.get("factors")
-                    sla_days = p_eval.get("sla_target_days", 7)
-
-            if p_score is None:
-                eval_text = (g.title or "") + " " + (g.description or "") + " " + (raw_ocr or g.original_text or "")
-                p_res = PriorityIntelligenceEngine.evaluate(eval_text, department=dept_suggestion)
-                p_score = p_res.priority_score
-                p_breakdown = p_res.factors
-                sla_days = p_res.sla_target_days
-
-            decision_panel = AIDecisionSupportPanel(
-                suggested_department=dept_suggestion,
-                priority=g.priority,
-                priority_score=p_score,
-                priority_breakdown=p_breakdown,
-                sla_target_days=sla_days,
-                reasoning=explanation_text,
-                key_facts=[
-                    f"Category: {g.category or 'General'}",
-                    f"Language: {g.original_language}",
-                    f"Priority Score: {p_score}/100 (SLA: {sla_days} days)",
-                ],
-                statutory_relevance=statutory_info,
-                missing_information=missing_info,
-                suggested_next_step=next_step,
-                confidence_score=confidence_val,
-            )
-
-            results.append(
-                OfficialGrievanceDetailResponse(
-                    id=g.id,
-                    grievance_number=g.grievance_number,
-                    citizen_id=g.citizen_id,
-                    citizen_name=citizen.full_name if citizen else "Citizen User",
-                    citizen_phone=citizen.phone if citizen else None,
-                    title=g.title,
-                    description=g.description,
-                    intake_mode=g.intake_mode,
-                    original_language=g.original_language,
-                    original_text=g.original_text,
-                    raw_ocr_text=raw_ocr if raw_ocr else g.original_text,
-                    status=g.status,
-                    priority=g.priority,
-                    priority_score=p_score,
-                    priority_breakdown=p_breakdown,
-                    sla_target_days=sla_days,
-                    predicted_department=analysis.predicted_category if analysis else None,
-                    assigned_department=g.department_id,
-                    assigned_official_id=getattr(g, "assigned_official_id", None),
-                    assigned_official_name=assigned_off_name,
-                    category=g.category,
-                    legal_grounding_references=analysis.legal_grounding_references if analysis else None,
-                    ai_explanation=analysis.ai_explanation if analysis else None,
-                    decision_support=decision_panel,
-                    attachments=[
-                        {
-                            "id": a.id,
-                            "filename": a.original_filename,
-                            "mime_type": a.mime_type,
-                            "raw_ocr_text": a.raw_extracted_text,
-                            "extraction_status": a.extraction_status,
-                        }
-                        for a in attachments
-                    ],
-                    audit_logs=[
-                        {
-                            "id": l.id,
-                            "actor_role": l.actor_role,
-                            "action_type": l.action_type,
-                            "previous_state": l.previous_state,
-                            "new_state": l.new_state,
-                            "remarks": l.remarks,
-                            "created_at": l.created_at.isoformat(),
-                        }
-                        for l in audit_logs
-                    ],
-                    created_at=g.created_at,
-                    updated_at=g.updated_at,
-                )
-            )
-        return results
+        return OfficialGrievanceDetailResponse(
+            id=g.id,
+            grievance_number=g.grievance_number,
+            citizen_id=g.citizen_id,
+            citizen_name=citizen.full_name if citizen else "Citizen User",
+            citizen_phone=citizen.phone if citizen else None,
+            title=g.title,
+            description=g.description,
+            intake_mode=g.intake_mode,
+            original_language=g.original_language,
+            original_text=g.original_text,
+            raw_ocr_text=raw_ocr if raw_ocr else g.original_text,
+            status=g.status,
+            priority=g.priority,
+            priority_score=p_score,
+            priority_breakdown=p_breakdown,
+            sla_target_days=sla_days,
+            predicted_department=analysis.predicted_category if analysis else None,
+            assigned_department=g.department_id,
+            assigned_official_id=getattr(g, "assigned_official_id", None),
+            assigned_official_name=assigned_off_name,
+            category=g.category,
+            legal_grounding_references=analysis.legal_grounding_references if analysis else None,
+            ai_explanation=analysis.ai_explanation if analysis else None,
+            decision_support=decision_panel,
+            attachments=[
+                {
+                    "id": a.id,
+                    "filename": a.original_filename,
+                    "mime_type": a.mime_type,
+                    "raw_ocr_text": a.raw_extracted_text,
+                    "extraction_status": a.extraction_status,
+                }
+                for a in attachments
+            ],
+            audit_logs=[
+                {
+                    "id": l.id,
+                    "actor_role": l.actor_role,
+                    "action_type": l.action_type,
+                    "previous_state": l.previous_state,
+                    "new_state": l.new_state,
+                    "remarks": l.remarks,
+                    "created_at": l.created_at.isoformat(),
+                }
+                for l in audit_logs
+            ],
+            created_at=g.created_at,
+            updated_at=g.updated_at,
+        )
 
     async def process_document_and_route(
         self, grievance_id: str, official_id: str
@@ -502,8 +506,22 @@ class OfficialService:
 
         prev_status = grievance.status
 
+        # 1. Update department forwarding and associated category
         if action_in.department_name:
             grievance.department_id = action_in.department_name
+            dept_categories = {
+                "Revenue & General Administration": "Revenue & Land Reforms",
+                "Kerala Water Authority (KWA)": "Drinking Water & Public Utilities",
+                "Public Works Department (PWD)": "Public Works & Roads",
+                "Kerala State Electricity Board (KSEB)": "Electricity & Power Infrastructure",
+                "Local Self Government Department (LSGD / Panchayat)": "Local Self Government & Sanitation",
+                "Irrigation & Water Resources Department": "Irrigation & Water Resources",
+            }
+            for d_name, cat in dept_categories.items():
+                if d_name.lower() in action_in.department_name.lower() or action_in.department_name.lower() in d_name.lower():
+                    grievance.category = cat
+                    break
+
             analysis_res = await self.db.execute(
                 select(GrievanceAnalysis).where(GrievanceAnalysis.grievance_id == grievance_id)
             )
@@ -514,11 +532,19 @@ class OfficialService:
         if action_in.assigned_official_id:
             grievance.assigned_official_id = action_in.assigned_official_id
 
+        # 2. Update grievance status
         if action_in.new_status:
-            grievance.status = action_in.new_status
+            valid_statuses = {
+                "forwarded", "under_processing", "clarification_required", "resolved", "closed", "under_analysis", "intake_received"
+            }
+            clean_status = action_in.new_status.strip().lower()
+            if clean_status in valid_statuses:
+                grievance.status = clean_status
 
-        if action_in.question:
-            grievance.official_clarification_question = action_in.question
+        # 3. Handle official clarification question
+        if action_in.question and action_in.question.strip():
+            grievance.official_clarification_question = action_in.question.strip()
+            grievance.status = "clarification_required"
         elif action_in.new_status == "clarification_required" and action_in.remarks:
             grievance.official_clarification_question = action_in.remarks
         elif action_in.new_status and action_in.new_status != "clarification_required":
@@ -530,7 +556,7 @@ class OfficialService:
         if action_in.question:
             remarks += f" Clarification Question: {action_in.question}"
 
-        action_type = "ADMINISTRATIVE_ASSIGNMENT_EXECUTED" if (action_in.department_name or action_in.assigned_official_id) else "OFFICIAL_ACTION_SUBMITTED"
+        action_type = "DEPARTMENT_FORWARDED" if action_in.department_name else "OFFICIAL_ACTION_SUBMITTED"
 
         audit_log = GrievanceAuditLog(
             grievance_id=grievance_id,
@@ -542,11 +568,31 @@ class OfficialService:
             remarks=remarks,
         )
         self.db.add(audit_log)
+
+        # 4. Notify citizen of official action / status change / forwarding
+        try:
+            from app.models.grievance_model import UserNotification
+            notif_msg = f"Your grievance #{grievance.grievance_number} status updated to {grievance.status.replace('_', ' ').title()}."
+            if action_in.department_name:
+                notif_msg = f"Your grievance #{grievance.grievance_number} has been forwarded to {action_in.department_name}."
+            if grievance.status == "clarification_required" and grievance.official_clarification_question:
+                notif_msg = f"Official requested clarification on #{grievance.grievance_number}: {grievance.official_clarification_question}"
+
+            notif = UserNotification(
+                user_id=grievance.citizen_id,
+                grievance_id=grievance.id,
+                title="Official Grievance Action Update",
+                message=notif_msg,
+                notification_type="STATUS_CHANGE",
+            )
+            self.db.add(notif)
+        except Exception:
+            pass
+
         await self.db.commit()
 
-        grievances = await self.get_all_official_grievances()
-        matched = [g for g in grievances if g.id == grievance_id]
-        return matched[0] if matched else grievances[0]
+        # 5. Return updated grievance detail directly in <15ms
+        return await self._build_official_detail_response(grievance)
 
     async def get_dashboard_summary(self, department_id: Optional[str] = None) -> OfficialDashboardSummaryResponse:
         all_grievances = await self.get_all_official_grievances()
@@ -618,7 +664,8 @@ class OfficialService:
             if query and query.strip():
                 q = query.strip().lower()
                 text_match = (
-                    q in (g.title or "").lower()
+                    q in g.id.lower()
+                    or q in (g.title or "").lower()
                     or q in (g.description or "").lower()
                     or q in g.grievance_number.lower()
                     or q in (g.original_text or "").lower()

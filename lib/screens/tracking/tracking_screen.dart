@@ -6,6 +6,7 @@ import '../../providers/grievance_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/custom_button.dart';
+import '../../services/api_service.dart';
 
 class TrackingScreen extends ConsumerStatefulWidget {
   final String? initialComplaintId;
@@ -65,7 +66,11 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
               children: [
                 const Icon(Icons.error_outline_rounded, size: 54, color: AppTheme.danger),
                 const SizedBox(height: 12),
-                Text('Failed to load tracking data: ${err.toString()}'),
+                Text(
+                  formatApiErrorMessage(err),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 13),
+                ),
                 const SizedBox(height: 16),
                 ElevatedButton(
                   onPressed: () => ref.invalidate(myGrievancesProvider),

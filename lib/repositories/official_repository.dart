@@ -141,6 +141,19 @@ class OfficialRepository {
     return OfficialDashboardSummaryModel.fromJson(response.data as Map<String, dynamic>);
   }
 
+  Future<GrievanceModel> getGrievanceById(String grievanceId) async {
+    try {
+      final response = await apiService.get('/official/grievances/$grievanceId');
+      return GrievanceModel.fromJson(response.data as Map<String, dynamic>);
+    } catch (_) {
+      final results = await searchGrievances(query: grievanceId);
+      return results.firstWhere(
+        (g) => g.id == grievanceId || g.grievanceNumber == grievanceId,
+        orElse: () => results.first,
+      );
+    }
+  }
+
   Future<List<GrievanceModel>> searchGrievances({
     String? query,
     String? status,

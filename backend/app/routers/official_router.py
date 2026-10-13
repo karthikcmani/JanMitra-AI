@@ -183,6 +183,26 @@ async def process_document_and_route_grievance(
     )
 
 
+@router.get(
+    "/grievances/{grievance_id}",
+    response_model=OfficialGrievanceDetailResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get single official grievance detail by ID",
+)
+async def get_official_grievance_detail(
+    grievance_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_official_or_admin),
+):
+    service = OfficialService(db)
+    detail = await service.get_official_grievance_by_id(grievance_id)
+    if not detail:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Grievance not found."
+        )
+    return detail
+
+
 @router.post(
     "/grievances/{grievance_id}/action",
     response_model=OfficialGrievanceDetailResponse,

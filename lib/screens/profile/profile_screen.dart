@@ -307,58 +307,55 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             const SizedBox(height: 24),
 
             // Account & Settings Options
-            Material(
-              color: Theme.of(context).cardTheme.color,
-              borderRadius: BorderRadius.circular(18),
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: AppTheme.borderLight),
-                ),
-                child: Column(
-                  children: [
-                    ListTile(
-                      leading: const Icon(
-                        Icons.dark_mode_outlined,
-                        color: AppTheme.primaryBlue,
-                      ),
-                      title: const Text('Dark Theme'),
-                      subtitle: Text(
-                        isDarkMode ? 'Dark Mode Enabled' : 'Light Mode Enabled',
-                      ),
-                      trailing: Switch(
-                        value: isDarkMode,
-                        onChanged: (val) {
-                          ref.read(themeProvider.notifier).toggleTheme();
-                        },
-                      ),
+            Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardTheme.color,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: AppTheme.borderLight),
+              ),
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(
+                      Icons.dark_mode_outlined,
+                      color: AppTheme.primaryBlue,
                     ),
-                    const Divider(height: 1, color: AppTheme.borderLight),
-                    ListTile(
-                      leading: const Icon(
-                        Icons.verified_user_outlined,
-                        color: AppTheme.primaryBlue,
-                      ),
-                      title: const Text('FastAPI Backend Service'),
-                      subtitle: const Text('JWT Secure Token Session Active'),
-                      trailing: const Icon(
-                        Icons.check_circle,
-                        color: AppTheme.success,
-                        size: 20,
-                      ),
+                    title: const Text('Dark Theme'),
+                    subtitle: Text(
+                      isDarkMode ? 'Dark Mode Enabled' : 'Light Mode Enabled',
                     ),
-                    const Divider(height: 1, color: AppTheme.borderLight),
-                    ListTile(
-                      leading: const Icon(
-                        Icons.security_outlined,
-                        color: AppTheme.primaryBlue,
-                      ),
-                      title: const Text('Security & Privacy'),
-                      trailing: const Icon(Icons.chevron_right_rounded),
-                      onTap: () {},
+                    trailing: Switch(
+                      value: isDarkMode,
+                      onChanged: (val) {
+                        ref.read(themeProvider.notifier).toggleTheme();
+                      },
                     ),
-                  ],
-                ),
+                  ),
+                  const Divider(height: 1, color: AppTheme.borderLight),
+                  const ListTile(
+                    leading: Icon(
+                      Icons.verified_user_outlined,
+                      color: AppTheme.primaryBlue,
+                    ),
+                    title: Text('FastAPI Backend Service'),
+                    subtitle: Text('JWT Secure Token Session Active'),
+                    trailing: Icon(
+                      Icons.check_circle,
+                      color: AppTheme.success,
+                      size: 20,
+                    ),
+                  ),
+                  const Divider(height: 1, color: AppTheme.borderLight),
+                  ListTile(
+                    leading: const Icon(
+                      Icons.security_outlined,
+                      color: AppTheme.primaryBlue,
+                    ),
+                    title: const Text('Security & Privacy'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () {},
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 32),
@@ -394,9 +391,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     String value, {
     VoidCallback? onTap,
   }) {
-    return InkWell(
+    return GestureDetector(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      behavior: HitTestBehavior.opaque,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../models/grievance_model.dart';
 import '../../providers/grievance_provider.dart';
+import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 
 class ComplaintListScreen extends ConsumerStatefulWidget {
@@ -78,7 +79,11 @@ class _ComplaintListScreenState extends ConsumerState<ComplaintListScreen> {
                     children: [
                       const Icon(Icons.error_outline_rounded, size: 48, color: AppTheme.danger),
                       const SizedBox(height: 12),
-                      Text('Failed to load grievances: ${err.toString()}', textAlign: TextAlign.center),
+                      Text(
+                        formatApiErrorMessage(err),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 13),
+                      ),
                       const SizedBox(height: 12),
                       ElevatedButton.icon(
                         onPressed: () => ref.invalidate(myGrievancesProvider),
