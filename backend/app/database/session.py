@@ -66,6 +66,10 @@ async def init_db_schema():
         "ALTER TABLE grievances ADD COLUMN IF NOT EXISTS priority_score INTEGER DEFAULT 50;",
         "ALTER TABLE grievances ADD COLUMN IF NOT EXISTS official_clarification_question TEXT;",
         "ALTER TABLE grievances ADD COLUMN IF NOT EXISTS parent_id VARCHAR(36);",
+        "ALTER TABLE grievances ADD COLUMN IF NOT EXISTS petitioner_name VARCHAR(255);",
+        "ALTER TABLE grievances ADD COLUMN IF NOT EXISTS filing_type VARCHAR(50) DEFAULT 'self';",
+        "ALTER TABLE grievances ADD COLUMN IF NOT EXISTS relationship VARCHAR(100);",
+        "ALTER TABLE grievances ADD COLUMN IF NOT EXISTS petitioner_phone VARCHAR(50);",
         "ALTER TABLE grievance_attachments ADD COLUMN IF NOT EXISTS file_content_base64 TEXT;",
         """
         DELETE FROM grievance_interview_questions

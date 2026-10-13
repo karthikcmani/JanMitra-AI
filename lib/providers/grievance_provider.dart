@@ -17,6 +17,9 @@ final myGrievancesProvider = FutureProvider.autoDispose<List<GrievanceModel>>((r
 /// Shared filter for complaint list screen ('All', 'Pending', 'Resolved', etc.)
 final complaintFilterProvider = StateProvider<String>((ref) => 'All');
 
+/// Active grievance ID currently focused on the Live Audit & Tracking screen
+final selectedTrackingGrievanceIdProvider = StateProvider<String?>((ref) => null);
+
 
 enum IntakeExtractionStep {
   idle,
@@ -239,7 +242,12 @@ class GrievanceIntakeNotifier extends StateNotifier<GrievanceIntakeState> {
     state = state.copyWith(verifiedText: text);
   }
 
-  Future<void> confirmVerification() async {
+  Future<void> confirmVerification({
+    String? petitionerName,
+    String filingType = 'self',
+    String? relationship,
+    String? petitionerPhone,
+  }) async {
     if (state.verifiedText.trim().isEmpty) {
       state = state.copyWith(errorMessage: 'Grievance text cannot be empty.');
       return;
@@ -257,6 +265,10 @@ class GrievanceIntakeNotifier extends StateNotifier<GrievanceIntakeState> {
               : 'Handwritten Petition Intake: ${state.selectedFileName ?? "Camera Scan"}',
           intakeMode: isVoice ? 'voice_stt' : 'ocr_handwritten',
           originalLanguage: 'ml',
+          petitionerName: petitionerName,
+          filingType: filingType,
+          relationship: relationship,
+          petitionerPhone: petitionerPhone,
         );
         state = state.copyWith(grievance: activeGrievance);
       }
@@ -265,6 +277,10 @@ class GrievanceIntakeNotifier extends StateNotifier<GrievanceIntakeState> {
         grievanceId: activeGrievance.id,
         verifiedText: state.verifiedText.trim(),
         attachmentId: state.attachment?.id,
+        petitionerName: petitionerName,
+        filingType: filingType,
+        relationship: relationship,
+        petitionerPhone: petitionerPhone,
       );
 
       state = state.copyWith(
@@ -288,6 +304,10 @@ class GrievanceIntakeNotifier extends StateNotifier<GrievanceIntakeState> {
   Future<GrievanceModel?> submitDirectText({
     required String title,
     required String text,
+    String? petitionerName,
+    String filingType = 'self',
+    String? relationship,
+    String? petitionerPhone,
   }) async {
     try {
       state = state.copyWith(isLoading: true, errorMessage: null);
@@ -296,6 +316,10 @@ class GrievanceIntakeNotifier extends StateNotifier<GrievanceIntakeState> {
         intakeMode: 'direct_text',
         originalLanguage: 'ml',
         originalText: text,
+        petitionerName: petitionerName,
+        filingType: filingType,
+        relationship: relationship,
+        petitionerPhone: petitionerPhone,
       );
       state = state.copyWith(
         grievance: draft,

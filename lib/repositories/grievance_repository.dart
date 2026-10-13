@@ -13,6 +13,10 @@ class GrievanceRepository {
     String intakeMode = 'ocr_handwritten',
     String originalLanguage = 'ml',
     String? originalText,
+    String? petitionerName,
+    String filingType = 'self',
+    String? relationship,
+    String? petitionerPhone,
   }) async {
     final response = await apiService.post(
       '/grievances/intake/draft',
@@ -21,6 +25,10 @@ class GrievanceRepository {
         'intake_mode': intakeMode,
         'original_language': originalLanguage,
         'original_text': originalText,
+        'petitioner_name': petitionerName,
+        'filing_type': filingType,
+        'relationship': relationship,
+        'petitioner_phone': petitionerPhone,
       },
     );
     return GrievanceModel.fromJson(response.data as Map<String, dynamic>);
@@ -124,12 +132,20 @@ class GrievanceRepository {
     required String grievanceId,
     required String verifiedText,
     String? attachmentId,
+    String? petitionerName,
+    String filingType = 'self',
+    String? relationship,
+    String? petitionerPhone,
   }) async {
     final response = await apiService.post(
       '/grievances/$grievanceId/verify',
       data: {
         'verified_text': verifiedText,
         'attachment_id': attachmentId,
+        'petitioner_name': petitionerName,
+        'filing_type': filingType,
+        'relationship': relationship,
+        'petitioner_phone': petitionerPhone,
       },
     );
     return GrievanceModel.fromJson(response.data as Map<String, dynamic>);

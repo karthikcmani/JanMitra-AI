@@ -10,6 +10,7 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/grievance_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/constants.dart';
@@ -51,6 +52,13 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
   final _directTextController = TextEditingController();
   final _verifiedTextController = TextEditingController();
 
+  // Petitioner Identity & Representation State
+  String _filingType = 'self'; // 'self' or 'on_behalf'
+  final _petitionerNameController = TextEditingController();
+  final _petitionerPhoneController = TextEditingController();
+  String _relationship = 'Family Member';
+  String? _detectedApplicantFromOcr;
+
   // Live Voice Recording State
   final AudioRecorder _audioRecorder = AudioRecorder();
   StreamSubscription<Amplitude>? _amplitudeSub;
@@ -89,6 +97,8 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
     _directTitleController.dispose();
     _directTextController.dispose();
     _verifiedTextController.dispose();
+    _petitionerNameController.dispose();
+    _petitionerPhoneController.dispose();
     super.dispose();
   }
 
@@ -403,6 +413,30 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
     if (state.extractionStep == IntakeExtractionStep.completed &&
         state.rawExtractedText != null) {
       _verifiedTextController.text = state.rawExtractedText!;
+      _detectPetitionerFromExtractedText(state.rawExtractedText!);
+    }
+  }
+
+  void _detectPetitionerFromExtractedText(String text) {
+    if (text.isEmpty) return;
+    final regExp = RegExp(
+      r'(?:അപേക്ഷകൻ|അപേക്ഷക|പരാതിക്കാരൻ|പരാതിക്കാരി|Applicant|Petitioner|Complainant)[\s,:]+([^\n,]+)',
+      caseSensitive: false,
+    );
+    final match = regExp.firstMatch(text);
+    if (match != null) {
+      String name = match.group(1)?.trim() ?? '';
+      name = name.replaceAll(RegExp(r'\[.*?\]'), '').trim();
+      if (name.isNotEmpty && name.length >= 3 && name.length <= 60) {
+        if (_detectedApplicantFromOcr != name) {
+          setState(() {
+            _detectedApplicantFromOcr = name;
+            if (_petitionerNameController.text.trim().isEmpty) {
+              _petitionerNameController.text = name;
+            }
+          });
+        }
+      }
     }
   }
 
@@ -505,6 +539,16 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
       return;
     }
 
+    if (_filingType == 'on_behalf' && _petitionerNameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please specify the actual petitioner/complainant name when filing on behalf of someone.'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+      return;
+    }
+
     final shouldProceed = await _promptDuplicateWarningIfAny(
       title: ref.read(grievanceIntakeProvider).selectedFileName,
       text: _verifiedTextController.text,
@@ -513,7 +557,12 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
 
     final notifier = ref.read(grievanceIntakeProvider.notifier);
     notifier.updateVerifiedText(_verifiedTextController.text);
-    await notifier.confirmVerification();
+    await notifier.confirmVerification(
+      petitionerName: _filingType == 'on_behalf' ? _petitionerNameController.text.trim() : null,
+      filingType: _filingType,
+      relationship: _filingType == 'on_behalf' ? _relationship : null,
+      petitionerPhone: _filingType == 'on_behalf' ? _petitionerPhoneController.text.trim() : null,
+    );
 
     final state = ref.read(grievanceIntakeProvider);
     if (state.isConfirmed && state.grievance != null && mounted) {
@@ -533,6 +582,16 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
       return;
     }
 
+    if (_filingType == 'on_behalf' && _petitionerNameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please specify the actual petitioner/complainant name when filing on behalf of someone.'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+      return;
+    }
+
     final shouldProceed = await _promptDuplicateWarningIfAny(
       title: _directTitleController.text.trim(),
       text: _directTextController.text.trim(),
@@ -543,6 +602,10 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
     final grievance = await notifier.submitDirectText(
       title: _directTitleController.text.trim(),
       text: _directTextController.text.trim(),
+      petitionerName: _filingType == 'on_behalf' ? _petitionerNameController.text.trim() : null,
+      filingType: _filingType,
+      relationship: _filingType == 'on_behalf' ? _relationship : null,
+      petitionerPhone: _filingType == 'on_behalf' ? _petitionerPhoneController.text.trim() : null,
     );
 
     if (grievance != null && mounted) {
@@ -1129,7 +1192,8 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
             ),
             style: const TextStyle(fontSize: 15),
           ),
-          const SizedBox(height: 20),
+          _buildPetitionerIdentitySection(isDark),
+          const SizedBox(height: 12),
 
           CustomButton(
             text: 'Confirm Petition Text & Register Grievance',
@@ -1166,7 +1230,8 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
             border: OutlineInputBorder(),
           ),
         ),
-        const SizedBox(height: 20),
+        _buildPetitionerIdentitySection(isDark),
+        const SizedBox(height: 12),
         CustomButton(
           text: 'Submit Direct Text Grievance',
           onPressed: _submitDirectText,
@@ -1552,7 +1617,8 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
             ),
             style: const TextStyle(fontSize: 15),
           ),
-          const SizedBox(height: 20),
+          _buildPetitionerIdentitySection(isDark),
+          const SizedBox(height: 12),
 
           CustomButton(
             text: 'Confirm Petition Text & Register Grievance',
@@ -1562,6 +1628,164 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
           ),
         ],
       ],
+    );
+  }
+
+  Widget _buildPetitionerIdentitySection(bool isDark) {
+    final authState = ref.watch(authProvider);
+    final citizenName = authState.currentUser?.fullName ?? 'Registered Citizen';
+    final citizenPhone = authState.currentUser?.phone ?? '';
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkSurface : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: _filingType == 'on_behalf'
+              ? const Color(0xFF7C3AED).withValues(alpha: 0.5)
+              : AppTheme.borderLight,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.badge_outlined,
+                size: 20,
+                color: _filingType == 'on_behalf' ? const Color(0xFF7C3AED) : AppTheme.primaryBlue,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Petitioner Identity & Representation',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Specify whether you are petitioning for yourself or representing someone else.',
+            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+          ),
+          const SizedBox(height: 12),
+
+          Row(
+            children: [
+              Expanded(
+                child: ChoiceChip(
+                  label: const Text('Filing for Myself (സ്വന്തം)'),
+                  selected: _filingType == 'self',
+                  onSelected: (selected) {
+                    if (selected) setState(() => _filingType = 'self');
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ChoiceChip(
+                  label: const Text('On Behalf / Other (മറ്റൊരാൾക്ക്)'),
+                  selected: _filingType == 'on_behalf',
+                  onSelected: (selected) {
+                    if (selected) setState(() => _filingType = 'on_behalf');
+                  },
+                ),
+              ),
+            ],
+          ),
+
+          if (_filingType == 'self') ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.success.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.success.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.verified_user_rounded, color: AppTheme.success, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Verified Complainant: $citizenName${citizenPhone.isNotEmpty ? " (Ph: $citizenPhone)" : ""}',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.success),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            const SizedBox(height: 12),
+            if (_detectedApplicantFromOcr != null) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF7C3AED).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.auto_awesome, size: 16, color: Color(0xFF7C3AED)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Document Applicant Detected: "$_detectedApplicantFromOcr"',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF7C3AED)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            TextFormField(
+              controller: _petitionerNameController,
+              decoration: const InputDecoration(
+                labelText: 'Actual Petitioner / Complainant Name *',
+                hintText: 'e.g. Sumesh Nair / സുമേഷ് നായർ',
+                prefixIcon: Icon(Icons.person_outline_rounded),
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              key: ValueKey('rel_$_relationship'),
+              initialValue: _relationship,
+              decoration: const InputDecoration(
+                labelText: 'Relationship / Representation Role',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: const [
+                DropdownMenuItem(value: 'Family Member', child: Text('Family Member / Relative (കുടുംബാംഗം)')),
+                DropdownMenuItem(value: 'Neighbor / Locality', child: Text('Neighbor / Locality Resident (അയൽവാസി)')),
+                DropdownMenuItem(value: 'Authorized Representative', child: Text('Authorized Representative (പ്രതിനിധി)')),
+                DropdownMenuItem(value: 'Community / Public Interest', child: Text('Public Interest / Community (പൊതുജന താല്പര്യം)')),
+              ],
+              onChanged: (val) {
+                if (val != null) setState(() => _relationship = val);
+              },
+            ),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: _petitionerPhoneController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Petitioner Phone Number (Optional)',
+                hintText: 'e.g. 9876543210',
+                prefixIcon: Icon(Icons.phone_outlined),
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

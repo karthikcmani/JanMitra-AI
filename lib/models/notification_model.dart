@@ -1,3 +1,5 @@
+import '../utils/date_formatter.dart';
+
 class UserNotificationModel {
   final String id;
   final String title;
@@ -25,9 +27,7 @@ class UserNotificationModel {
       grievanceId: json['grievance_id']?.toString(),
       notificationType: (json['notification_type'] ?? 'info').toString(),
       isRead: json['is_read'] as bool? ?? false,
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      createdAt: parseUtcToLocal(json['created_at']),
     );
   }
 }

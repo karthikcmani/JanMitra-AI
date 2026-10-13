@@ -116,6 +116,10 @@ class Grievance(Base):
         nullable=True,
         index=True,
     )
+    petitioner_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    filing_type: Mapped[str] = mapped_column(String(50), default="self", nullable=False)
+    petitioner_relationship: Mapped[Optional[str]] = mapped_column("relationship", String(100), nullable=True)
+    petitioner_phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

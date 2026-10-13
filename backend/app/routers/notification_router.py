@@ -1,3 +1,4 @@
+from datetime import timezone
 from typing import Any, Dict, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,7 +32,7 @@ async def get_my_notifications(
             "grievance_id": n.grievance_id,
             "notification_type": n.notification_type,
             "is_read": n.is_read,
-            "created_at": str(n.created_at),
+            "created_at": (n.created_at.replace(tzinfo=timezone.utc) if n.created_at.tzinfo is None else n.created_at).isoformat() if n.created_at else None,
         }
         for n in notifs
     ]

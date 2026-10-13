@@ -223,6 +223,10 @@ async def verify_grievance(
         grievance_id=grievance_id,
         verified_text=verification_in.verified_text,
         attachment_id=verification_in.attachment_id,
+        petitioner_name=verification_in.petitioner_name,
+        filing_type=verification_in.filing_type or "self",
+        relationship=verification_in.relationship,
+        petitioner_phone=verification_in.petitioner_phone,
     )
 
 

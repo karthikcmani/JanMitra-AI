@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../models/grievance_model.dart';
 import '../../providers/grievance_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/date_formatter.dart';
 import '../../widgets/custom_button.dart';
 import '../../services/api_service.dart';
 
@@ -23,6 +25,8 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   final Map<String, TextEditingController> _interviewControllers = {};
   bool _isSubmittingClarification = false;
   bool _isSubmittingInterview = false;
+  bool _isFullTextExpanded = false;
+  final Set<String> _expandedAttachments = {};
 
   @override
   void initState() {
@@ -42,6 +46,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   @override
   Widget build(BuildContext context) {
     final grievancesAsync = ref.watch(myGrievancesProvider);
+    final navSelectedId = ref.watch(selectedTrackingGrievanceIdProvider);
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -85,7 +90,9 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
             return _buildNoComplaintsView();
           }
 
-          if (_selectedId == null || !grievances.any((g) => g.id == _selectedId)) {
+          if (navSelectedId != null && grievances.any((g) => g.id == navSelectedId)) {
+            _selectedId = navSelectedId;
+          } else if (_selectedId == null || !grievances.any((g) => g.id == _selectedId)) {
             _selectedId = grievances.first.id;
           }
 
@@ -129,7 +136,11 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                   onChanged: (val) {
                     setState(() {
                       _selectedId = val;
+                      _isFullTextExpanded = false;
                     });
+                    if (val != null) {
+                      ref.read(selectedTrackingGrievanceIdProvider.notifier).state = val;
+                    }
                   },
                   decoration: InputDecoration(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -139,6 +150,9 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                 const SizedBox(height: 20),
 
                 _buildSummaryCard(currentGrievance),
+                const SizedBox(height: 24),
+
+                _buildExtractedPetitionTextCard(currentGrievance),
                 const SizedBox(height: 24),
 
                 if (currentGrievance.subGrievances.isNotEmpty) ...[
@@ -337,6 +351,27 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
           const SizedBox(height: 8),
           Row(
             children: [
+              Icon(
+                grievance.filingType == 'on_behalf' ? Icons.handshake_outlined : Icons.person_outline_rounded,
+                size: 14,
+                color: grievance.filingType == 'on_behalf' ? Colors.deepPurple : AppTheme.primaryBlue,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Petitioner: ${grievance.getPetitionerDisplay()}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: grievance.filingType == 'on_behalf' ? Colors.deepPurple : AppTheme.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
               const Icon(
                 Icons.calendar_today_outlined,
                 size: 14,
@@ -352,6 +387,104 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
               ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExtractedPetitionTextCard(GrievanceModel grievance) {
+    final fullText = grievance.getFullPetitionText() ?? grievance.getShortBriefing() ?? 'No raw text available.';
+    final isLong = fullText.length > 250;
+    final displayText = (!_isFullTextExpanded && isLong)
+        ? '${fullText.substring(0, 240)}...'
+        : fullText;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardTheme.color,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppTheme.primaryBlue.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryBlue.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.article_rounded, color: AppTheme.primaryBlue, size: 20),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Extracted Petition & Complaint Text',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.copy_rounded, size: 18),
+                tooltip: 'Copy Full Petition Text',
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: fullText));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Petition text copied to clipboard!'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.white.withValues(alpha: 0.04)
+                  : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.borderLight),
+            ),
+            child: SelectableText(
+              displayText,
+              style: const TextStyle(
+                fontSize: 13.5,
+                height: 1.5,
+                fontFamily: 'Roboto',
+              ),
+            ),
+          ),
+          if (isLong) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _isFullTextExpanded = !_isFullTextExpanded;
+                  });
+                },
+                icon: Icon(
+                  _isFullTextExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                  size: 18,
+                ),
+                label: Text(
+                  _isFullTextExpanded ? 'Show Less' : 'Show Full Extracted Text (${fullText.length} chars)',
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1246,7 +1379,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   }
 
   String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    return formatToIST(date);
   }
 
   Widget _buildAttachmentsCard(GrievanceModel grievance) {
@@ -1273,6 +1406,10 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
           const SizedBox(height: 12),
           ...grievance.attachments.map((att) {
             final isCompleted = att.extractionStatus == 'completed';
+            final isExpanded = _expandedAttachments.contains(att.id);
+            final rawText = att.rawExtractedText ?? '';
+            final isLong = rawText.length > 200;
+
             return Container(
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(12),
@@ -1315,16 +1452,70 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                       ),
                     ],
                   ),
-                  if (att.rawExtractedText != null && att.rawExtractedText!.isNotEmpty) ...[
+                  if (rawText.isNotEmpty) ...[
                     const SizedBox(height: 8),
-                    const Text('Extracted Petition Text:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 2),
-                    Text(
-                      att.rawExtractedText!,
-                      maxLines: 4,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.black87),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Extracted Petition Text:',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                        InkWell(
+                          onTap: () {
+                            Clipboard.setData(ClipboardData(text: rawText));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Attachment text copied to clipboard!'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                            child: Row(
+                              children: [
+                                Icon(Icons.copy_rounded, size: 13, color: AppTheme.primaryBlue),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Copy',
+                                  style: TextStyle(fontSize: 11, color: AppTheme.primaryBlue, fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: 4),
+                    SelectableText(
+                      (!isExpanded && isLong) ? '${rawText.substring(0, 190)}...' : rawText,
+                      style: const TextStyle(fontSize: 12, height: 1.4),
+                    ),
+                    if (isLong)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: const Size(50, 24),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              if (isExpanded) {
+                                _expandedAttachments.remove(att.id);
+                              } else {
+                                _expandedAttachments.add(att.id);
+                              }
+                            });
+                          },
+                          child: Text(
+                            isExpanded ? 'Show Less' : 'Show Full Extracted Text',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ),
                   ],
                   const SizedBox(height: 10),
                   OutlinedButton.icon(

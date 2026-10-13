@@ -1,3 +1,5 @@
+import '../utils/date_formatter.dart';
+
 class AIDecisionSupportModel {
   final String suggestedDepartment;
   final String priority;
@@ -99,12 +101,8 @@ class GrievanceIssueModel {
           ? json['extracted_facts'] as Map<String, dynamic>
           : null,
       interviewStatus: (json['interview_status'] ?? 'not_required').toString(),
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
-      updatedAt: json['updated_at'] != null
-          ? DateTime.tryParse(json['updated_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      createdAt: parseUtcToLocal(json['created_at']),
+      updatedAt: parseUtcToLocal(json['updated_at']),
     );
   }
 }
@@ -142,9 +140,7 @@ class GrievanceInterviewQuestionModel {
       required: json['required'] as bool? ?? true,
       orderIndex: (json['order_index'] as num?)?.toInt() ?? 1,
       status: (json['status'] ?? 'PENDING').toString(),
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      createdAt: parseUtcToLocal(json['created_at']),
     );
   }
 }
@@ -190,12 +186,8 @@ class SubGrievanceSummaryModel {
       priority: (json['priority'] ?? 'medium').toString(),
       severity: json['severity']?.toString(),
       summary: json['summary']?.toString(),
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
-      updatedAt: json['updated_at'] != null
-          ? DateTime.tryParse(json['updated_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      createdAt: parseUtcToLocal(json['created_at']),
+      updatedAt: parseUtcToLocal(json['updated_at']),
     );
   }
 }
@@ -225,6 +217,10 @@ class GrievanceModel {
   final String? departmentId;
   final String? citizenName;
   final String? citizenPhone;
+  final String? petitionerName;
+  final String? filingType;
+  final String? relationship;
+  final String? petitionerPhone;
   final String? rawOcrText;
   final String? predictedDepartment;
   final String? assignedDepartment;
@@ -245,6 +241,10 @@ class GrievanceModel {
     required this.citizenId,
     this.citizenName,
     this.citizenPhone,
+    this.petitionerName,
+    this.filingType,
+    this.relationship,
+    this.petitionerPhone,
     this.title,
     this.description,
     required this.intakeMode,
@@ -331,6 +331,10 @@ class GrievanceModel {
       citizenId: (json['citizen_id'] ?? '').toString(),
       citizenName: json['citizen_name']?.toString(),
       citizenPhone: json['citizen_phone']?.toString(),
+      petitionerName: json['petitioner_name']?.toString() ?? json['citizen_name']?.toString(),
+      filingType: (json['filing_type'] ?? 'self').toString(),
+      relationship: json['relationship']?.toString(),
+      petitionerPhone: json['petitioner_phone']?.toString(),
       title: json['title']?.toString(),
       description: json['description']?.toString(),
       intakeMode: (json['intake_mode'] ?? 'direct_text').toString(),
@@ -347,7 +351,7 @@ class GrievanceModel {
       severity: json['severity']?.toString(),
       summary: json['summary']?.toString(),
       aiProcessingStatus: json['ai_processing_status']?.toString(),
-      aiProcessedAt: json['ai_processed_at'] != null ? DateTime.tryParse(json['ai_processed_at'].toString()) : null,
+      aiProcessedAt: json['ai_processed_at'] != null ? parseUtcToLocal(json['ai_processed_at']) : null,
       aiModel: json['ai_model']?.toString(),
       aiErrorMessage: json['ai_error_message']?.toString(),
       category: json['category']?.toString(),
@@ -363,12 +367,8 @@ class GrievanceModel {
       issues: parsedIssues,
       interviewQuestions: parsedQuestions,
       subGrievances: parsedSubGrievances,
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
-      updatedAt: json['updated_at'] != null
-          ? DateTime.tryParse(json['updated_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      createdAt: parseUtcToLocal(json['created_at']),
+      updatedAt: parseUtcToLocal(json['updated_at']),
     );
   }
 
@@ -419,6 +419,37 @@ class GrievanceModel {
     }
     return null;
   }
+
+  /// Returns the full raw petition or extracted text from all available sources.
+  String? getFullPetitionText() {
+    if (originalText != null && originalText!.trim().isNotEmpty) {
+      return originalText!.trim();
+    }
+    if (description != null && description!.trim().isNotEmpty) {
+      return description!.trim();
+    }
+    if (rawOcrText != null && rawOcrText!.trim().isNotEmpty) {
+      return rawOcrText!.trim();
+    }
+    for (final att in attachments) {
+      if (att.rawExtractedText != null && att.rawExtractedText!.trim().isNotEmpty) {
+        return att.rawExtractedText!.trim();
+      }
+    }
+    return null;
+  }
+
+  /// Returns a clean display string of petitioner identity and representation status.
+  String getPetitionerDisplay() {
+    if (filingType == 'on_behalf' && petitionerName != null && petitionerName!.isNotEmpty) {
+      final relStr = relationship != null && relationship!.isNotEmpty ? ' ($relationship)' : '';
+      return '$petitionerName$relStr [Filed on Behalf]';
+    }
+    if (petitionerName != null && petitionerName!.isNotEmpty) {
+      return petitionerName!;
+    }
+    return citizenName ?? 'Self';
+  }
 }
 
 class GrievanceAuditLogModel {
@@ -454,9 +485,7 @@ class GrievanceAuditLogModel {
       previousState: json['previous_state']?.toString(),
       newState: json['new_state']?.toString(),
       remarks: json['remarks']?.toString(),
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      createdAt: parseUtcToLocal(json['created_at']),
     );
   }
 }
@@ -509,11 +538,9 @@ class GrievanceAttachmentModel {
       extractionEngine: json['extraction_engine']?.toString(),
       extractionError: json['extraction_error']?.toString(),
       extractedAt: json['extracted_at'] != null
-          ? DateTime.tryParse(json['extracted_at'].toString())
+          ? parseUtcToLocal(json['extracted_at'])
           : null,
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      createdAt: parseUtcToLocal(json['created_at']),
     );
   }
 }
@@ -550,9 +577,7 @@ class NormalizedExtractionResultModel {
       extractionStatus: (json['extraction_status'] ?? '').toString(),
       confidenceScore: (json['confidence_score'] as num?)?.toDouble(),
       engineName: (json['engine_name'] ?? '').toString(),
-      processedAt: json['processed_at'] != null
-          ? DateTime.tryParse(json['processed_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      processedAt: parseUtcToLocal(json['processed_at']),
       errorMessage: json['error_message']?.toString(),
     );
   }

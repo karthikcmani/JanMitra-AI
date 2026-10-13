@@ -50,6 +50,10 @@ class OfficialGrievanceDetailResponse(BaseModel):
     citizen_id: str
     citizen_name: Optional[str] = None
     citizen_phone: Optional[str] = None
+    petitioner_name: Optional[str] = None
+    filing_type: Optional[str] = "self"
+    relationship: Optional[str] = None
+    petitioner_phone: Optional[str] = None
     title: Optional[str] = None
     description: Optional[str] = None
     intake_mode: str
@@ -317,6 +321,10 @@ class OfficialService:
             citizen_id=g.citizen_id,
             citizen_name=citizen.full_name if citizen else "Citizen User",
             citizen_phone=citizen.phone if citizen else None,
+            petitioner_name=getattr(g, "petitioner_name", None) or (citizen.full_name if citizen else "Citizen User"),
+            filing_type=getattr(g, "filing_type", "self") or "self",
+            relationship=getattr(g, "petitioner_relationship", None) or getattr(g, "relationship", None),
+            petitioner_phone=getattr(g, "petitioner_phone", None) or (citizen.phone if citizen else None),
             title=g.title,
             description=g.description,
             intake_mode=g.intake_mode,
@@ -572,22 +580,44 @@ class OfficialService:
         # 4. Notify citizen of official action / status change / forwarding
         try:
             from app.models.grievance_model import UserNotification
+            import uuid
+            notif_title = "Official Action Executed"
+            notif_type = "status_update"
             notif_msg = f"Your grievance #{grievance.grievance_number} status updated to {grievance.status.replace('_', ' ').title()}."
-            if action_in.department_name:
-                notif_msg = f"Your grievance #{grievance.grievance_number} has been forwarded to {action_in.department_name}."
-            if grievance.status == "clarification_required" and grievance.official_clarification_question:
-                notif_msg = f"Official requested clarification on #{grievance.grievance_number}: {grievance.official_clarification_question}"
 
-            notif = UserNotification(
-                user_id=grievance.citizen_id,
-                grievance_id=grievance.id,
-                title="Official Grievance Action Update",
-                message=notif_msg,
-                notification_type="STATUS_CHANGE",
-            )
-            self.db.add(notif)
-        except Exception:
-            pass
+            if grievance.status == "clarification_required":
+                notif_title = "Action Required: Official Clarification Requested"
+                notif_type = "clarification_required"
+                q_text = grievance.official_clarification_question or action_in.question or action_in.remarks or "Additional details requested"
+                notif_msg = f"Official requested clarification on #{grievance.grievance_number}: {q_text}"
+            elif action_in.new_status == "forwarded" or (action_in.department_name and action_in.department_name != prev_dept):
+                notif_title = "Grievance Forwarded"
+                notif_type = "forwarded"
+                notif_msg = f"Your grievance #{grievance.grievance_number} has been forwarded to {action_in.department_name or grievance.department_id}."
+            elif grievance.status == "resolved":
+                notif_title = "Grievance Resolved"
+                notif_type = "resolution"
+                notif_msg = f"Your grievance #{grievance.grievance_number} has been marked resolved by authorities."
+            elif grievance.status == "under_processing":
+                notif_title = "Under Active Processing"
+                notif_type = "status_update"
+                notif_msg = f"Your grievance #{grievance.grievance_number} is now under active processing by {grievance.department_id}."
+
+            if grievance.citizen_id:
+                notif = UserNotification(
+                    id=str(uuid.uuid4()),
+                    user_id=grievance.citizen_id,
+                    grievance_id=grievance.id,
+                    title=notif_title,
+                    message=notif_msg,
+                    notification_type=notif_type,
+                    is_read=False,
+                    created_at=datetime.now(timezone.utc),
+                )
+                self.db.add(notif)
+        except Exception as e:
+            import logging
+            logging.getLogger("official.service").warning(f"Citizen notification creation note: {e}")
 
         await self.db.commit()
 

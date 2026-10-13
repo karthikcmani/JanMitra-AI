@@ -495,7 +495,15 @@ class GrievanceService:
         return GrievanceResponse.model_validate(updated)
 
     async def verify_and_submit(
-        self, citizen_id: str, grievance_id: str, verified_text: str, attachment_id: Optional[str] = None
+        self,
+        citizen_id: str,
+        grievance_id: str,
+        verified_text: str,
+        attachment_id: Optional[str] = None,
+        petitioner_name: Optional[str] = None,
+        filing_type: Optional[str] = "self",
+        relationship: Optional[str] = None,
+        petitioner_phone: Optional[str] = None,
     ) -> GrievanceResponse:
         from app.models.grievance_model import GrievanceAuditLog, GrievanceStatus, ExtractionStatus
         grievance = await self.repo.get_user_grievance(grievance_id, citizen_id)
@@ -508,6 +516,14 @@ class GrievanceService:
         prev_status = grievance.status
         grievance.original_text = verified_text
         grievance.status = GrievanceStatus.INTAKE_RECEIVED
+        if petitioner_name:
+            grievance.petitioner_name = petitioner_name
+        if filing_type:
+            grievance.filing_type = filing_type
+        if relationship:
+            grievance.petitioner_relationship = relationship
+        if petitioner_phone:
+            grievance.petitioner_phone = petitioner_phone
 
         if attachment_id:
             att = await self.repo.get_attachment_for_grievance(grievance_id, attachment_id)
@@ -527,6 +543,11 @@ class GrievanceService:
                     att.extraction_status = ExtractionStatus.COMPLETED
                     att.extraction_engine = "citizen_manual_verification"
 
+        verification_remarks = f"Citizen verified/provided petition text: {verified_text[:100]}..."
+        if grievance.filing_type == "on_behalf" and grievance.petitioner_name:
+            rel = f" ({grievance.petitioner_relationship})" if grievance.petitioner_relationship else ""
+            verification_remarks = f"Citizen verified petition on behalf of {grievance.petitioner_name}{rel}: {verified_text[:100]}..."
+
         audit_log = GrievanceAuditLog(
             id=str(uuid.uuid4()),
             grievance_id=grievance_id,
@@ -535,7 +556,7 @@ class GrievanceService:
             action_type="CITIZEN_VERIFICATION_CONFIRMED",
             previous_state=prev_status,
             new_state=grievance.status,
-            remarks=f"Citizen verified/provided petition text: {verified_text[:100]}...",
+            remarks=verification_remarks,
         )
         self.repo.db.add(audit_log)
 
@@ -554,13 +575,22 @@ class GrievanceService:
 
             from app.services.notification_service import NotificationService
             notif_service = NotificationService(self.repo.db)
+            petitioner_label = f"for '{grievance.petitioner_name}'" if (grievance.filing_type == "on_behalf" and grievance.petitioner_name) else "petition"
             await notif_service.create_notification(
                 user_id=citizen_id,
                 title="Grievance Submitted & Verified",
-                message=f"Your grievance petition '{grievance.title or 'JM-' + grievance.grievance_number}' has been received and processed by JanMitra AI.",
+                message=f"Your grievance {petitioner_label} (Ticket #{grievance.grievance_number}) has been verified and registered.",
                 grievance_id=grievance.id,
                 notification_type="STATUS_CHANGE",
             )
+            if grievance.department_id:
+                await notif_service.create_notification(
+                    user_id=citizen_id,
+                    title=f"Assigned to {grievance.department_id}",
+                    message=f"Ticket #{grievance.grievance_number} statutory analysis completed and routed to {grievance.department_id}.",
+                    grievance_id=grievance.id,
+                    notification_type="status_update",
+                )
         except Exception as e:
             import logging
             logging.getLogger("grievance.pipeline").warning(f"Routing pipeline note: {e}")

@@ -38,10 +38,19 @@ class GrievanceRepository:
             priority=draft_in.priority,
             confirmed_location=draft_in.confirmed_location,
             location_sources=draft_in.location_sources,
+            petitioner_name=draft_in.petitioner_name,
+            filing_type=draft_in.filing_type or "self",
+            petitioner_relationship=draft_in.relationship,
+            petitioner_phone=draft_in.petitioner_phone,
         )
         self.db.add(grievance)
 
         # Automatic initial creation audit event
+        audit_remarks = "Grievance draft initialized."
+        if draft_in.filing_type == "on_behalf" and draft_in.petitioner_name:
+            rel = f" ({draft_in.relationship})" if draft_in.relationship else ""
+            audit_remarks = f"Grievance draft initialized on behalf of {draft_in.petitioner_name}{rel}."
+
         audit_log = GrievanceAuditLog(
             id=str(uuid.uuid4()),
             grievance_id=grievance.id,
@@ -50,7 +59,7 @@ class GrievanceRepository:
             action_type="created",
             previous_state=None,
             new_state=GrievanceStatus.DRAFT,
-            remarks="Grievance draft initialized.",
+            remarks=audit_remarks,
         )
         self.db.add(audit_log)
 

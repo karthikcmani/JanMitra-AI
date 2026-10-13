@@ -16,6 +16,10 @@ class GrievanceDraftCreate(BaseModel):
     department: Optional[str] = None
     confirmed_location: Optional[Dict[str, Any]] = None
     location_sources: Optional[Dict[str, Any]] = None
+    petitioner_name: Optional[str] = Field(None, max_length=255)
+    filing_type: Optional[str] = Field("self", max_length=50)
+    relationship: Optional[str] = Field(None, max_length=100)
+    petitioner_phone: Optional[str] = Field(None, max_length=50)
 
 
 class GrievanceClarificationRequest(BaseModel):
@@ -25,6 +29,10 @@ class GrievanceClarificationRequest(BaseModel):
 class GrievanceVerificationRequest(BaseModel):
     verified_text: str = Field(..., min_length=1)
     attachment_id: Optional[str] = None
+    petitioner_name: Optional[str] = Field(None, max_length=255)
+    filing_type: Optional[str] = Field("self", max_length=50)
+    relationship: Optional[str] = Field(None, max_length=100)
+    petitioner_phone: Optional[str] = Field(None, max_length=50)
 
 
 class GrievanceAuditLogResponse(BaseModel):
@@ -150,6 +158,12 @@ class GrievanceResponse(BaseModel):
     id: str
     grievance_number: str
     citizen_id: str
+    citizen_name: Optional[str] = None
+    citizen_phone: Optional[str] = None
+    petitioner_name: Optional[str] = None
+    filing_type: Optional[str] = "self"
+    relationship: Optional[str] = None
+    petitioner_phone: Optional[str] = None
     title: Optional[str] = None
     description: Optional[str] = None
     intake_mode: str
