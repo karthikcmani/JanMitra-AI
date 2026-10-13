@@ -51,3 +51,17 @@ class AuthService:
             token_type="bearer",
             user=user_response,
         )
+
+    async def update_profile(self, user_id: str, profile_in) -> UserResponse:
+        updated = await self.user_repo.update_profile(
+            user_id=user_id,
+            full_name=profile_in.full_name,
+            phone=profile_in.phone,
+        )
+        if not updated:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found.",
+            )
+        await self.user_repo.db.commit()
+        return UserResponse.model_validate(updated)

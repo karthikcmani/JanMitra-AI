@@ -14,11 +14,10 @@ class ComplaintListScreen extends ConsumerStatefulWidget {
 }
 
 class _ComplaintListScreenState extends ConsumerState<ComplaintListScreen> {
-  String _selectedStatus = 'All';
-
   @override
   Widget build(BuildContext context) {
     final grievancesAsync = ref.watch(myGrievancesProvider);
+    final activeFilter = ref.watch(complaintFilterProvider);
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -48,17 +47,19 @@ class _ComplaintListScreenState extends ConsumerState<ComplaintListScreen> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _buildFilterChip('All'),
+                  _buildFilterChip('All', activeFilter),
                   const SizedBox(width: 8),
-                  _buildFilterChip('draft'),
+                  _buildFilterChip('Pending', activeFilter, label: 'Pending (In Progress)'),
                   const SizedBox(width: 8),
-                  _buildFilterChip('under_analysis'),
+                  _buildFilterChip('Resolved', activeFilter, label: 'Resolved (Completed)'),
                   const SizedBox(width: 8),
-                  _buildFilterChip('under_processing'),
+                  _buildFilterChip('under_processing', activeFilter),
                   const SizedBox(width: 8),
-                  _buildFilterChip('clarification_required'),
+                  _buildFilterChip('under_analysis', activeFilter),
                   const SizedBox(width: 8),
-                  _buildFilterChip('resolved'),
+                  _buildFilterChip('clarification_required', activeFilter),
+                  const SizedBox(width: 8),
+                  _buildFilterChip('draft', activeFilter),
                 ],
               ),
             ),
@@ -90,8 +91,16 @@ class _ComplaintListScreenState extends ConsumerState<ComplaintListScreen> {
               ),
               data: (grievances) {
                 final filtered = grievances.where((g) {
-                  if (_selectedStatus == 'All') return true;
-                  return g.status.toLowerCase() == _selectedStatus.toLowerCase();
+                  final statusLower = g.status.toLowerCase();
+                  final filterLower = activeFilter.toLowerCase();
+                  if (filterLower == 'all') return true;
+                  if (filterLower == 'pending') {
+                    return statusLower != 'resolved' && statusLower != 'closed';
+                  }
+                  if (filterLower == 'resolved') {
+                    return statusLower == 'resolved' || statusLower == 'closed';
+                  }
+                  return statusLower == filterLower;
                 }).toList();
 
                 if (filtered.isEmpty) {
@@ -136,20 +145,19 @@ class _ComplaintListScreenState extends ConsumerState<ComplaintListScreen> {
     );
   }
 
-  Widget _buildFilterChip(String statusKey) {
-    final displayLabel = statusKey == 'All'
-        ? 'All'
-        : statusKey.replaceAll('_', ' ').toUpperCase();
-    final isSelected = _selectedStatus.toLowerCase() == statusKey.toLowerCase();
+  Widget _buildFilterChip(String statusKey, String activeFilter, {String? label}) {
+    final displayLabel = label ??
+        (statusKey == 'All'
+            ? 'All'
+            : statusKey.replaceAll('_', ' ').toUpperCase());
+    final isSelected = activeFilter.toLowerCase() == statusKey.toLowerCase();
 
     return ChoiceChip(
       label: Text(displayLabel),
       selected: isSelected,
       onSelected: (selected) {
         if (selected) {
-          setState(() {
-            _selectedStatus = statusKey;
-          });
+          ref.read(complaintFilterProvider.notifier).state = statusKey;
         }
       },
       selectedColor: AppTheme.primaryBlue,

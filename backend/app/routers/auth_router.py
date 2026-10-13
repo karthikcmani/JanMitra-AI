@@ -7,6 +7,7 @@ from app.schemas.user_schema import (
     Token,
     UserCreate,
     UserLogin,
+    UserProfileUpdate,
     UserResponse,
 )
 from app.services.auth_service import AuthService
@@ -53,6 +54,21 @@ async def get_me(
     current_user: UserResponse = Depends(get_current_user),
 ):
     return current_user
+
+
+@router.put(
+    "/profile",
+    response_model=UserResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Update authenticated citizen profile",
+)
+async def update_profile(
+    profile_in: UserProfileUpdate,
+    current_user: UserResponse = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = AuthService(db)
+    return await service.update_profile(current_user.id, profile_in)
 
 
 @router.post(

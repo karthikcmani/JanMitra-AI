@@ -352,7 +352,111 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
     }
   }
 
+  Future<bool> _promptDuplicateWarningIfAny({String? title, required String text}) async {
+    final notifier = ref.read(grievanceIntakeProvider.notifier);
+    final dup = await notifier.checkDuplicate(title: title, text: text);
+    if (!mounted) return true;
+
+    if (dup['is_duplicate'] == true) {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 28),
+              SizedBox(width: 8),
+              Text('Duplicate Notice', style: TextStyle(fontSize: 18)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                dup['message'] ?? 'You already have an active grievance filed for this issue.',
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.amber.shade400),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Existing Ticket: #${dup['existing_grievance_number'] ?? ""}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    if (dup['existing_title'] != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Title: ${dup['existing_title']}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ],
+                    const SizedBox(height: 4),
+                    Text(
+                      'Status: ${(dup['existing_status'] ?? "").toString().replaceAll("_", " ").toUpperCase()}',
+                      style: const TextStyle(
+                        color: AppTheme.primaryBlue,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Filing duplicate grievances slows down official administrative review. Do you wish to view your active grievance or submit a new separate ticket?',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop(false);
+                context.push('/tracking');
+              },
+              child: const Text('View Existing Ticket'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.warning),
+              child: const Text('Submit Anyway'),
+            ),
+          ],
+        ),
+      );
+      return proceed == true;
+    }
+    return true;
+  }
+
   Future<void> _confirmAndSubmitHandwritten() async {
+    if (_verifiedTextController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please verify or enter the petition text before confirming.'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+      return;
+    }
+
+    final shouldProceed = await _promptDuplicateWarningIfAny(
+      title: ref.read(grievanceIntakeProvider).selectedFileName,
+      text: _verifiedTextController.text,
+    );
+    if (!shouldProceed || !mounted) return;
+
     final notifier = ref.read(grievanceIntakeProvider.notifier);
     notifier.updateVerifiedText(_verifiedTextController.text);
     await notifier.confirmVerification();
@@ -374,6 +478,12 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
       );
       return;
     }
+
+    final shouldProceed = await _promptDuplicateWarningIfAny(
+      title: _directTitleController.text.trim(),
+      text: _directTextController.text.trim(),
+    );
+    if (!shouldProceed || !mounted) return;
 
     final notifier = ref.read(grievanceIntakeProvider.notifier);
     final grievance = await notifier.submitDirectText(

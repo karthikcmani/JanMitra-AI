@@ -34,6 +34,26 @@ async def create_grievance_draft(
     )
 
 
+@router.post(
+    "/check-duplicate",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    summary="Check if a grievance being filed is a duplicate of an existing active grievance",
+)
+async def check_duplicate_grievance(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user),
+):
+    service = GrievanceService(db)
+    return await service.check_duplicate_grievance(
+        citizen_id=current_user.id,
+        title=payload.get("title"),
+        text=payload.get("text"),
+        current_id=payload.get("current_id"),
+    )
+
+
 @router.get(
     "/my",
     response_model=List[GrievanceResponse],

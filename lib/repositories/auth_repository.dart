@@ -200,6 +200,27 @@ class AuthRepository {
     }
   }
 
+  Future<UserModel?> updateProfile({
+    required String fullName,
+    String? phone,
+  }) async {
+    try {
+      final response = await apiService.put(
+        '/auth/profile',
+        data: {
+          'full_name': fullName.trim(),
+          if (phone != null) 'phone': phone.trim(),
+        },
+      );
+      if (response.statusCode == 200) {
+        return UserModel.fromJson(response.data as Map<String, dynamic>);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> logout() async {
     try {
       await apiService.post('/auth/logout');

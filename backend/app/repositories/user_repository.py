@@ -33,3 +33,15 @@ class UserRepository:
         await self.db.flush()
         await self.db.refresh(db_user)
         return db_user
+
+    async def update_profile(self, user_id: str, full_name: Optional[str] = None, phone: Optional[str] = None) -> Optional[User]:
+        db_user = await self.get_by_id(user_id)
+        if not db_user:
+            return None
+        if full_name is not None and full_name.strip():
+            db_user.full_name = full_name.strip()
+        if phone is not None:
+            db_user.phone = phone.strip()
+        await self.db.flush()
+        await self.db.refresh(db_user)
+        return db_user

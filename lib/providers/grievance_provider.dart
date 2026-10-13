@@ -14,6 +14,9 @@ final myGrievancesProvider = FutureProvider.autoDispose<List<GrievanceModel>>((r
   return await repository.getMyGrievances();
 });
 
+/// Shared filter for complaint list screen ('All', 'Pending', 'Resolved', etc.)
+final complaintFilterProvider = StateProvider<String>((ref) => 'All');
+
 
 enum IntakeExtractionStep {
   idle,
@@ -304,6 +307,17 @@ class GrievanceIntakeNotifier extends StateNotifier<GrievanceIntakeState> {
       );
       return null;
     }
+  }
+
+  Future<Map<String, dynamic>> checkDuplicate({
+    String? title,
+    String? text,
+  }) async {
+    return await _repository.checkDuplicate(
+      title: title,
+      text: text,
+      currentId: state.grievance?.id,
+    );
   }
 
   void reset() {

@@ -20,6 +20,11 @@ class UserLogin(BaseModel):
     password: str
 
 
+class UserProfileUpdate(BaseModel):
+    full_name: Optional[str] = Field(None, min_length=2, max_length=100)
+    phone: Optional[str] = Field(None, max_length=20)
+
+
 class UserResponse(BaseModel):
     id: str
     full_name: str

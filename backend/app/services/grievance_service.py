@@ -115,6 +115,60 @@ class GrievanceService:
         grievances = await self.repo.get_all_by_citizen_id(citizen_id)
         return [GrievanceResponse.model_validate(g) for g in grievances]
 
+    async def check_duplicate_grievance(
+        self, citizen_id: str, title: Optional[str] = None, text: Optional[str] = None, current_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Detects whether citizen is filing a duplicate or near-identical grievance for an issue already active."""
+        if not title and not text:
+            return {"is_duplicate": False, "similarity_score": 0.0, "message": "No text provided for duplicate check."}
+
+        candidate_title = (title or "").strip().lower()
+        candidate_text = (text or "").strip().lower()
+
+        # Fetch active grievances for this citizen
+        active_grievances = await self.repo.get_all_by_citizen_id(citizen_id)
+        for g in active_grievances:
+            if current_id and g.id == current_id:
+                continue
+            if g.status in ("resolved", "closed", "rejected"):
+                continue
+
+            existing_title = (g.title or "").strip().lower()
+            existing_text = (g.original_text or g.description or "").strip().lower()
+
+            # Exact title or text match
+            if candidate_title and existing_title and (candidate_title == existing_title or candidate_title in existing_title or existing_title in candidate_title):
+                if len(candidate_title) > 8:
+                    return {
+                        "is_duplicate": True,
+                        "similarity_score": 0.95,
+                        "existing_grievance_id": g.id,
+                        "existing_grievance_number": g.grievance_number,
+                        "existing_title": g.title,
+                        "existing_status": g.status,
+                        "message": f"An active grievance (#{g.grievance_number}) with the same title is already being processed.",
+                    }
+
+            # Word overlap / Jaccard similarity
+            words_cand = set([w for w in (candidate_title + " " + candidate_text).split() if len(w) > 3])
+            words_exist = set([w for w in (existing_title + " " + existing_text).split() if len(w) > 3])
+            if words_cand and words_exist:
+                intersect = words_cand.intersection(words_exist)
+                union = words_cand.union(words_exist)
+                jaccard = len(intersect) / len(union)
+                if jaccard >= 0.40 or (len(intersect) >= 4 and len(candidate_text) > 20):
+                    return {
+                        "is_duplicate": True,
+                        "similarity_score": round(jaccard, 2),
+                        "existing_grievance_id": g.id,
+                        "existing_grievance_number": g.grievance_number,
+                        "existing_title": g.title,
+                        "existing_status": g.status,
+                        "message": f"Potential duplicate: You have an active grievance (#{g.grievance_number} - {g.title}) regarding this issue.",
+                    }
+
+        return {"is_duplicate": False, "similarity_score": 0.0, "message": "No active duplicates detected."}
+
     async def get_grievance_by_id(
         self, grievance_id: str, citizen_id: str
     ) -> GrievanceResponse:

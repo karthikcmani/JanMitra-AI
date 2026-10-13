@@ -344,7 +344,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             iconColor: AppTheme.primaryBlue,
             iconBgColor: const Color(0xFFE0F2FE),
             subtitle: 'Grievances',
-            onTap: () => MainCitizenShellController.of(context)?.onSelectTab(1),
+            onTap: () {
+              ref.read(complaintFilterProvider.notifier).state = 'All';
+              MainCitizenShellController.of(context)?.onSelectTab(1);
+            },
           ),
         ),
         const SizedBox(width: 8),
@@ -356,7 +359,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             iconColor: AppTheme.warning,
             iconBgColor: const Color(0xFFFEF3C7),
             subtitle: 'In Progress',
-            onTap: () => MainCitizenShellController.of(context)?.onSelectTab(1),
+            onTap: () {
+              ref.read(complaintFilterProvider.notifier).state = 'Pending';
+              MainCitizenShellController.of(context)?.onSelectTab(1);
+            },
           ),
         ),
         const SizedBox(width: 8),
@@ -368,7 +374,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             iconColor: AppTheme.success,
             iconBgColor: const Color(0xD1D1FADF),
             subtitle: 'Completed',
-            onTap: () => MainCitizenShellController.of(context)?.onSelectTab(1),
+            onTap: () {
+              ref.read(complaintFilterProvider.notifier).state = 'Resolved';
+              MainCitizenShellController.of(context)?.onSelectTab(1);
+            },
           ),
         ),
       ],

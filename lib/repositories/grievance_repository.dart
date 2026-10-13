@@ -164,5 +164,26 @@ class GrievanceRepository {
     final list = response.data as List<dynamic>;
     return list.map((j) => Map<String, dynamic>.from(j as Map)).toList();
   }
+
+  /// Checks if candidate grievance is duplicate of an existing active grievance
+  Future<Map<String, dynamic>> checkDuplicate({
+    String? title,
+    String? text,
+    String? currentId,
+  }) async {
+    try {
+      final response = await apiService.post(
+        '/grievances/check-duplicate',
+        data: {
+          'title': title,
+          'text': text,
+          'current_id': currentId,
+        },
+      );
+      return Map<String, dynamic>.from(response.data as Map);
+    } catch (_) {
+      return {'is_duplicate': false};
+    }
+  }
 }
 
