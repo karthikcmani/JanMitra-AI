@@ -135,6 +135,27 @@ async def download_grievance_attachment(
     )
 
 
+@router.get(
+    "/{grievance_id}/attachments/{attachment_id}/{filename}",
+    response_class=FileResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Download/retrieve an uploaded attachment file with filename in path",
+)
+async def download_grievance_attachment_with_filename(
+    grievance_id: str,
+    attachment_id: str,
+    filename: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[UserResponse] = Depends(get_optional_user),
+):
+    return await download_grievance_attachment(
+        grievance_id=grievance_id,
+        attachment_id=attachment_id,
+        db=db,
+        current_user=current_user,
+    )
+
+
 @router.put(
     "/{grievance_id}/attachments/{attachment_id}/content",
     response_model=dict,

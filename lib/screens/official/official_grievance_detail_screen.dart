@@ -931,7 +931,9 @@ class _OfficialGrievanceDetailScreenState extends ConsumerState<OfficialGrievanc
 
   void _showAttachmentPreview(BuildContext context, String grievanceId, GrievanceAttachmentModel att) {
     final baseUrl = ref.read(apiServiceProvider).baseUrl;
-    final fileUrl = '$baseUrl/grievances/$grievanceId/attachments/${att.id}';
+    final fileUrl = att.originalFilename.isNotEmpty
+        ? '$baseUrl/grievances/$grievanceId/attachments/${att.id}/${att.originalFilename}'
+        : '$baseUrl/grievances/$grievanceId/attachments/${att.id}';
     showAttachmentPreviewModal(
       context,
       fileUrl: fileUrl,

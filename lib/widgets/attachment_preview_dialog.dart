@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:dio/dio.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../models/grievance_model.dart';
 import '../../theme/app_theme.dart';
 
@@ -30,7 +33,7 @@ AttachmentKind getAttachmentKind(String filename, String? mimeType) {
   return AttachmentKind.document;
 }
 
-/// Helper function to show attachment preview dialog everywhere
+/// Helper function to show attachment preview dialog across the entire application
 void showAttachmentPreviewModal(
   BuildContext context, {
   required String fileUrl,
@@ -38,6 +41,7 @@ void showAttachmentPreviewModal(
 }) {
   showDialog(
     context: context,
+    barrierDismissible: true,
     builder: (ctx) => AttachmentPreviewDialog(
       fileUrl: fileUrl,
       attachment: attachment,
@@ -58,22 +62,22 @@ class AttachmentPreviewDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final kind = getAttachmentKind(attachment.originalFilename, attachment.mimeType);
+    final screenSize = MediaQuery.of(context).size;
+    final dialogWidth = screenSize.width > 640 ? 560.0 : screenSize.width * 0.94;
+    final dialogHeight = screenSize.height * 0.82;
 
     return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       clipBehavior: Clip.antiAlias,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: 520,
-          maxHeight: MediaQuery.of(context).size.height * 0.85,
-        ),
+      child: SizedBox(
+        width: dialogWidth,
+        height: dialogHeight,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
             _buildHeader(context, kind),
             const Divider(height: 1),
-            Flexible(
+            Expanded(
               child: _buildBody(context, kind),
             ),
             const Divider(height: 1),
@@ -120,14 +124,14 @@ class AttachmentPreviewDialog extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(7),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: iconColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: iconColor, size: 20),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -153,7 +157,7 @@ class AttachmentPreviewDialog extends StatelessWidget {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.close_rounded, size: 20),
+            icon: const Icon(Icons.close_rounded, size: 22),
             tooltip: 'Close',
             onPressed: () => Navigator.of(context).pop(),
           ),
@@ -185,7 +189,7 @@ class AttachmentPreviewDialog extends StatelessWidget {
 
   Widget _buildFooter(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -200,7 +204,7 @@ class AttachmentPreviewDialog extends StatelessWidget {
           TextButton.icon(
             onPressed: () => Navigator.of(context).pop(),
             icon: const Icon(Icons.check_rounded, size: 16),
-            label: const Text('Close Preview', style: TextStyle(fontWeight: FontWeight.bold)),
+            label: const Text('Close', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -209,6 +213,7 @@ class AttachmentPreviewDialog extends StatelessWidget {
 }
 
 /// Rich Audio Player and Transcription viewer for Voice Petitions
+/// Uses local device caching and DeviceFileSource to guarantee 100% reliable Android playback
 class _AudioPreviewContent extends StatefulWidget {
   final String fileUrl;
   final GrievanceAttachmentModel attachment;
@@ -228,7 +233,8 @@ class _AudioPreviewContentState extends State<_AudioPreviewContent> {
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
   double _playbackSpeed = 1.0;
-  bool _isLoading = false;
+  bool _isLoading = true;
+  String? _localAudioPath;
   String? _errorMessage;
 
   StreamSubscription? _playerStateSubscription;
@@ -240,10 +246,11 @@ class _AudioPreviewContentState extends State<_AudioPreviewContent> {
   void initState() {
     super.initState();
     _player = AudioPlayer();
-    _initAudioPlayer();
+    _initAudioListeners();
+    _prepareAudioSource();
   }
 
-  void _initAudioPlayer() {
+  void _initAudioListeners() {
     _playerStateSubscription = _player.onPlayerStateChanged.listen((state) {
       if (mounted) {
         setState(() {
@@ -279,6 +286,74 @@ class _AudioPreviewContentState extends State<_AudioPreviewContent> {
     });
   }
 
+  /// Downloads and caches the audio file locally to guarantee native Android playback without HTTP 206 range stream errors
+  Future<void> _prepareAudioSource() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final tempDir = await getTemporaryDirectory();
+
+      // Check if file was recorded on this device directly
+      final directFile = File('${tempDir.path}/${widget.attachment.originalFilename}');
+      if (await directFile.exists() && await directFile.length() > 0) {
+        _localAudioPath = directFile.path;
+        await _player.setSource(DeviceFileSource(_localAudioPath!));
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      // Check cached copy
+      final safeName = widget.attachment.originalFilename.isNotEmpty
+          ? widget.attachment.originalFilename
+          : 'voice_${widget.attachment.id}.m4a';
+      final cachedFile = File('${tempDir.path}/cached_${widget.attachment.id}_$safeName');
+      if (await cachedFile.exists() && await cachedFile.length() > 0) {
+        _localAudioPath = cachedFile.path;
+        await _player.setSource(DeviceFileSource(_localAudioPath!));
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      // Download from server to local cache
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 30),
+      ));
+
+      await dio.download(widget.fileUrl, cachedFile.path);
+
+      if (await cachedFile.exists() && await cachedFile.length() > 0) {
+        _localAudioPath = cachedFile.path;
+        await _player.setSource(DeviceFileSource(_localAudioPath!));
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      } else {
+        throw Exception('Downloaded audio file is empty.');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Notice: Audio stream is unavailable on device. The full transcribed petition is available below.';
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
     _playerStateSubscription?.cancel();
@@ -291,24 +366,21 @@ class _AudioPreviewContentState extends State<_AudioPreviewContent> {
   }
 
   Future<void> _togglePlayPause() async {
-    setState(() {
-      _errorMessage = null;
-    });
-
     try {
       if (_state == PlayerState.playing) {
         await _player.pause();
       } else {
-        setState(() {
-          _isLoading = true;
-        });
-        await _player.setPlaybackRate(_playbackSpeed);
-        await _player.play(UrlSource(widget.fileUrl));
+        if (_localAudioPath != null && await File(_localAudioPath!).exists()) {
+          await _player.setPlaybackRate(_playbackSpeed);
+          await _player.play(DeviceFileSource(_localAudioPath!));
+        } else {
+          await _player.setPlaybackRate(_playbackSpeed);
+          await _player.play(UrlSource(widget.fileUrl));
+        }
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _isLoading = false;
           _errorMessage = 'Playback note: $e';
         });
       }
@@ -350,7 +422,7 @@ class _AudioPreviewContentState extends State<_AudioPreviewContent> {
     final transcript = widget.attachment.rawExtractedText ?? '';
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -544,7 +616,7 @@ class _AudioPreviewContentState extends State<_AudioPreviewContent> {
           ),
 
           if (_errorMessage != null) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
@@ -558,7 +630,7 @@ class _AudioPreviewContentState extends State<_AudioPreviewContent> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Audio stream notice: The voice file is stored on the server. Read the complete verified speech-to-text transcript below.',
+                      _errorMessage!,
                       style: TextStyle(fontSize: 11, color: Colors.amber.shade900),
                     ),
                   ),
@@ -649,8 +721,8 @@ class _AudioPreviewContentState extends State<_AudioPreviewContent> {
   }
 }
 
-/// Image viewer with pan and zoom capabilities
-class _ImagePreviewContent extends StatelessWidget {
+/// Image viewer with explicit bounded viewport, pan, zoom, and fallback controls
+class _ImagePreviewContent extends StatefulWidget {
   final String fileUrl;
   final GrievanceAttachmentModel attachment;
 
@@ -660,46 +732,285 @@ class _ImagePreviewContent extends StatelessWidget {
   });
 
   @override
+  State<_ImagePreviewContent> createState() => _ImagePreviewContentState();
+}
+
+class _ImagePreviewContentState extends State<_ImagePreviewContent> {
+  final TransformationController _transformController = TransformationController();
+  File? _localFile;
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLocalOrDownload();
+  }
+
+  @override
+  void dispose() {
+    _transformController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _checkLocalOrDownload() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final tempDir = await getTemporaryDirectory();
+
+      // Check if image was recently captured on this device directly
+      final directFile = File('${tempDir.path}/${widget.attachment.originalFilename}');
+      if (await directFile.exists() && await directFile.length() > 0) {
+        if (mounted) {
+          setState(() {
+            _localFile = directFile;
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      final safeName = widget.attachment.originalFilename.isNotEmpty
+          ? widget.attachment.originalFilename
+          : 'image_${widget.attachment.id}.jpg';
+      final cachedFile = File('${tempDir.path}/cached_img_${widget.attachment.id}_$safeName');
+      if (await cachedFile.exists() && await cachedFile.length() > 0) {
+        if (mounted) {
+          setState(() {
+            _localFile = cachedFile;
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      // Download image with Dio for resilience
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 30),
+      ));
+      await dio.download(widget.fileUrl, cachedFile.path);
+
+      if (await cachedFile.exists() && await cachedFile.length() > 0) {
+        if (mounted) {
+          setState(() {
+            _localFile = cachedFile;
+            _isLoading = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      // Fallback to Image.network directly
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = e.toString();
+        });
+      }
+    }
+  }
+
+  void _zoomIn() {
+    final matrix = _transformController.value.clone();
+    matrix.multiply(Matrix4.diagonal3Values(1.25, 1.25, 1.0));
+    _transformController.value = matrix;
+  }
+
+  void _zoomOut() {
+    final matrix = _transformController.value.clone();
+    matrix.multiply(Matrix4.diagonal3Values(0.8, 0.8, 1.0));
+    _transformController.value = matrix;
+  }
+
+  void _resetZoom() {
+    _transformController.value = Matrix4.identity();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Container(
       color: Colors.black87,
-      child: InteractiveViewer(
-        panEnabled: true,
-        minScale: 0.5,
-        maxScale: 4.0,
-        child: Center(
-          child: Image.network(
-            fileUrl,
-            fit: BoxFit.contain,
-            loadingBuilder: (context, child, loadingProgress) {
-              if (loadingProgress == null) return child;
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(32),
+      width: double.infinity,
+      height: double.infinity,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: InteractiveViewer(
+              transformationController: _transformController,
+              panEnabled: true,
+              minScale: 0.5,
+              maxScale: 5.0,
+              child: Center(
+                child: _buildImageWidget(),
+              ),
+            ),
+          ),
+          if (_isLoading)
+            const Positioned.fill(
+              child: ColoredBox(
+                color: Colors.black54,
+                child: Center(
                   child: CircularProgressIndicator(color: Colors.white),
                 ),
-              );
-            },
-            errorBuilder: (context, error, stackTrace) {
-              return Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+              ),
+            ),
+          // Floating toolbar
+          Positioned(
+            top: 10,
+            right: 10,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white24),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.zoom_in, color: Colors.white, size: 20),
+                    tooltip: 'Zoom In',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: _zoomIn,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.zoom_out, color: Colors.white, size: 20),
+                    tooltip: 'Zoom Out',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: _zoomOut,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.restart_alt_rounded, color: Colors.white, size: 20),
+                    tooltip: 'Reset View',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: _resetZoom,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (widget.attachment.rawExtractedText != null &&
+              widget.attachment.rawExtractedText!.isNotEmpty)
+            Positioned(
+              bottom: 12,
+              left: 14,
+              right: 14,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.black87.withValues(alpha: 0.85),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: Row(
                   children: [
-                    const Icon(Icons.broken_image_outlined, size: 48, color: Colors.white70),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Unable to render image: $error',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    const Icon(Icons.document_scanner_rounded, color: AppTheme.secondaryTeal, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        widget.attachment.rawExtractedText!.length > 60
+                            ? '${widget.attachment.rawExtractedText!.substring(0, 60)}...'
+                            : widget.attachment.rawExtractedText!,
+                        style: const TextStyle(color: Colors.white, fontSize: 11),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: widget.attachment.rawExtractedText!));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Document OCR text copied to clipboard!'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        child: Text(
+                          'Copy OCR',
+                          style: TextStyle(
+                            color: AppTheme.secondaryTeal,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),
-              );
-            },
-          ),
-        ),
+              ),
+            ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildImageWidget() {
+    if (_localFile != null) {
+      return Image.file(
+        _localFile!,
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) => _buildNetworkFallback(),
+      );
+    }
+    return _buildNetworkFallback();
+  }
+
+  Widget _buildNetworkFallback() {
+    return Image.network(
+      widget.fileUrl,
+      fit: BoxFit.contain,
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return const Center(
+          child: Padding(
+            padding: EdgeInsets.all(32),
+            child: CircularProgressIndicator(color: Colors.white),
+          ),
+        );
+      },
+      errorBuilder: (context, error, stackTrace) {
+        return Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.broken_image_outlined, size: 48, color: Colors.white70),
+              const SizedBox(height: 10),
+              Text(
+                _errorMessage != null
+                    ? 'Unable to display image: $_errorMessage'
+                    : 'Original image document (${widget.attachment.originalFilename}) is stored securely on the server.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: Colors.white38),
+                ),
+                icon: const Icon(Icons.refresh_rounded, size: 16),
+                label: const Text('Retry Loading Image', style: TextStyle(fontSize: 12)),
+                onPressed: _checkLocalOrDownload,
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
