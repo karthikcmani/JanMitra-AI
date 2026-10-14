@@ -423,6 +423,13 @@ class GrievanceService:
         # 4. Perform extraction via abstraction adapter
         try:
             abs_path = self.storage.get_absolute_path(attachment.storage_path)
+            # Ephemeral filesystem safeguard: Rehydrate missing or 0-byte file from DB base64
+            if (not abs_path.exists() or abs_path.stat().st_size == 0) and getattr(attachment, "file_content_base64", None):
+                import base64
+                abs_path.parent.mkdir(parents=True, exist_ok=True)
+                raw_bytes = base64.b64decode(attachment.file_content_base64)
+                abs_path.write_bytes(raw_bytes)
+
             result = await extractor_adapter.extract_content(
                 attachment=attachment, file_path=abs_path
             )

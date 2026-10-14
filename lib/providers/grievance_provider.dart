@@ -149,7 +149,10 @@ class GrievanceIntakeNotifier extends StateNotifier<GrievanceIntakeState> {
         errorMessage: null,
       );
 
-      final isVoice = state.intakeMode == 'voice_stt';
+      final isAudioFile = state.selectedFileName != null &&
+          ['.m4a', '.wav', '.mp3', '.aac', '.ogg', '.opus', '.flac', '.webm']
+              .any((ext) => state.selectedFileName!.toLowerCase().endsWith(ext));
+      final isVoice = state.intakeMode == 'voice_stt' || isAudioFile;
       final draft = await _repository.createDraft(
         title: isVoice
             ? 'Voice Petition Intake: ${state.selectedFileName}'
@@ -174,13 +177,13 @@ class GrievanceIntakeNotifier extends StateNotifier<GrievanceIntakeState> {
           attachment.rawExtractedText != null &&
           attachment.rawExtractedText!.isNotEmpty) {
         state = state.copyWith(
-          grievance: draft,
-          attachment: attachment,
-          rawExtractedText: attachment.rawExtractedText,
-          verifiedText: attachment.rawExtractedText!,
-          extractionStep: IntakeExtractionStep.completed,
-          isLoading: false,
-        );
+            grievance: draft,
+            attachment: attachment,
+            rawExtractedText: attachment.rawExtractedText,
+            verifiedText: attachment.rawExtractedText!,
+            extractionStep: IntakeExtractionStep.completed,
+            isLoading: false,
+          );
         return;
       }
 
@@ -217,7 +220,10 @@ class GrievanceIntakeNotifier extends StateNotifier<GrievanceIntakeState> {
         );
       }
     } on DioException catch (e) {
-      final isVoice = state.intakeMode == 'voice_stt';
+      final isAudioFile = state.selectedFileName != null &&
+          ['.m4a', '.wav', '.mp3', '.aac', '.ogg', '.opus', '.flac', '.webm']
+              .any((ext) => state.selectedFileName!.toLowerCase().endsWith(ext));
+      final isVoice = state.intakeMode == 'voice_stt' || isAudioFile;
       final detail = e.response?.data?['detail']?.toString() ?? e.message;
       state = state.copyWith(
         extractionStep: IntakeExtractionStep.completed,
@@ -227,7 +233,10 @@ class GrievanceIntakeNotifier extends StateNotifier<GrievanceIntakeState> {
             : 'Note: Automatic OCR unavailable ($detail). Please type/verify the complaint text below.',
       );
     } catch (e) {
-      final isVoice = state.intakeMode == 'voice_stt';
+      final isAudioFile = state.selectedFileName != null &&
+          ['.m4a', '.wav', '.mp3', '.aac', '.ogg', '.opus', '.flac', '.webm']
+              .any((ext) => state.selectedFileName!.toLowerCase().endsWith(ext));
+      final isVoice = state.intakeMode == 'voice_stt' || isAudioFile;
       state = state.copyWith(
         extractionStep: IntakeExtractionStep.completed,
         isLoading: false,

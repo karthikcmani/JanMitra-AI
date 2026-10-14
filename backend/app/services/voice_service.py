@@ -80,20 +80,20 @@ class VoiceTranscriptionAdapter(BaseExtractionAdapter):
         now = datetime.now(timezone.utc)
         engine_name = "voice_stt_adapter_v2"
 
-        if not file_path or not file_path.exists():
-            return NormalizedExtractionResult(
-                source_type=attachment.attachment_type or AttachmentType.VOICE_RECORDING,
-                source_attachment_id=attachment.id,
-                original_language="ml",
-                extracted_text=None,
-                extraction_status=ExtractionStatus.FAILED,
-                confidence_score=None,
-                engine_name=engine_name,
-                processed_at=now,
-                error_message="Voice audio file path does not exist on disk.",
-            )
+        audio_bytes = b""
+        if file_path and file_path.exists():
+            audio_bytes = file_path.read_bytes()
 
-        audio_bytes = file_path.read_bytes()
+        # Ephemeral storage safeguard: recover audio bytes directly from DB base64 if disk copy missing
+        if (not audio_bytes or len(audio_bytes) == 0) and getattr(attachment, "file_content_base64", None):
+            try:
+                audio_bytes = base64.b64decode(attachment.file_content_base64)
+                if file_path:
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
+                    file_path.write_bytes(audio_bytes)
+            except Exception as b64_err:
+                logger.warning(f"Failed to decode attachment audio base64: {b64_err}")
+
         if not audio_bytes:
             return NormalizedExtractionResult(
                 source_type=attachment.attachment_type or AttachmentType.VOICE_RECORDING,
@@ -104,18 +104,18 @@ class VoiceTranscriptionAdapter(BaseExtractionAdapter):
                 confidence_score=None,
                 engine_name=engine_name,
                 processed_at=now,
-                error_message="Uploaded voice recording file is empty.",
+                error_message="Voice audio recording could not be loaded or is empty.",
             )
 
-        mime_type = _normalize_audio_mime(file_path, attachment.mime_type)
-        filename = attachment.original_filename or file_path.name
+        mime_type = _normalize_audio_mime(file_path, attachment.mime_type) if file_path else "audio/wav"
+        filename = attachment.original_filename or (file_path.name if file_path else "voice_petition.m4a")
 
         # 1. Try Groq Whisper API (whisper-large-v3-turbo / whisper-large-v3)
         groq_key = get_groq_api_key()
         if groq_key:
             for groq_model in ["whisper-large-v3-turbo", "whisper-large-v3"]:
                 try:
-                    async with httpx.AsyncClient(timeout=12.0) as client:
+                    async with httpx.AsyncClient(timeout=25.0) as client:
                         files = {"file": (filename, audio_bytes, mime_type)}
                         data = {
                             "model": groq_model,
@@ -185,12 +185,14 @@ class VoiceTranscriptionAdapter(BaseExtractionAdapter):
             }
 
             try:
-                async with httpx.AsyncClient(timeout=15.0) as client:
+                async with httpx.AsyncClient(timeout=30.0) as client:
                     for model_name in [
-                        "gemini-3.5-flash-lite",
-                        "gemini-3.1-flash-lite",
+                        "gemini-2.5-flash-lite",
+                        "gemini-2.5-flash",
+                        "gemini-2.0-flash",
                         "gemini-flash-lite-latest",
-                        "gemini-flash-latest",
+                        "gemini-3.1-flash-lite",
+                        "gemini-3.8-flash",
                     ]:
                         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
                         resp = await client.post(url, json=payload, headers=headers)
@@ -225,7 +227,7 @@ class VoiceTranscriptionAdapter(BaseExtractionAdapter):
                 from google.genai import types
 
                 client = genai.Client(api_key=api_key.strip())
-                for model_name in ["gemini-3.5-flash-lite", "gemini-flash-lite-latest"]:
+                for model_name in ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-lite-latest"]:
                     try:
                         response = await asyncio.to_thread(
                             client.models.generate_content,

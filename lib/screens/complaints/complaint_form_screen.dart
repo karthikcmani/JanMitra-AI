@@ -66,6 +66,8 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
   bool _isRecordingVoice = false;
   int _recordingSeconds = 0;
   double _normalizedAmplitude = 0.0;
+  String? _currentVoiceRecordingPath;
+  String? _currentVoiceRecordingName;
 
   @override
   void initState() {
@@ -278,7 +280,10 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
 
       final tempDir = await getTemporaryDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final filePath = '${tempDir.path}/live_voice_petition_$timestamp.m4a';
+      final fileName = 'live_voice_petition_$timestamp.m4a';
+      final filePath = '${tempDir.path}/$fileName';
+      _currentVoiceRecordingPath = filePath;
+      _currentVoiceRecordingName = fileName;
 
       const config = RecordConfig(
         encoder: AudioEncoder.aacLc,
@@ -339,22 +344,47 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
         _normalizedAmplitude = 0.0;
       });
 
-      if (cancel || recordedPath == null) {
+      if (cancel) {
         return;
       }
 
-      final file = File(recordedPath);
+      final targetPath = (recordedPath != null && recordedPath.isNotEmpty)
+          ? recordedPath
+          : _currentVoiceRecordingPath;
+
+      if (targetPath == null) {
+        return;
+      }
+
+      final file = File(targetPath);
+      // Wait up to 1000ms in 200ms increments for the audio encoder to flush AAC headers
+      int attempts = 0;
+      while (attempts < 5) {
+        if (await file.exists()) {
+          final len = await file.length();
+          if (len > 100) break;
+        }
+        await Future.delayed(const Duration(milliseconds: 200));
+        attempts++;
+      }
+
       if (await file.exists()) {
         final sizeBytes = await file.length();
-        final fileName = file.uri.pathSegments.isNotEmpty
-            ? file.uri.pathSegments.last
-            : 'live_voice_petition_${DateTime.now().millisecondsSinceEpoch}.m4a';
+        if (sizeBytes < 50) {
+          throw Exception('Recorded audio file is too short or empty.');
+        }
+        final fileName = _currentVoiceRecordingName ??
+            (file.uri.pathSegments.isNotEmpty
+                ? file.uri.pathSegments.last
+                : 'live_voice_petition_${DateTime.now().millisecondsSinceEpoch}.m4a');
         ref.read(grievanceIntakeProvider.notifier).setPickedFile(
               file.path,
               fileName,
               sizeBytes,
             );
         await _triggerExtraction();
+      } else {
+        throw Exception('Audio file was not found on device storage after recording.');
       }
     } catch (e) {
       setState(() {
@@ -412,9 +442,17 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
 
     final state = ref.read(grievanceIntakeProvider);
     if (state.extractionStep == IntakeExtractionStep.completed &&
-        state.rawExtractedText != null) {
+        state.rawExtractedText != null &&
+        state.rawExtractedText!.trim().isNotEmpty) {
       _verifiedTextController.text = state.rawExtractedText!;
       _detectPetitionerFromExtractedText(state.rawExtractedText!);
+    } else if (state.errorMessage != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(state.errorMessage!),
+          backgroundColor: AppTheme.warning,
+        ),
+      );
     }
   }
 
