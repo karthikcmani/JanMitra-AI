@@ -633,7 +633,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         color: AppTheme.textSecondary,
                       ),
                       onTap: () {
-                        context.push('/tracking');
+                        ref.read(selectedTrackingGrievanceIdProvider.notifier).state = item.id;
+                        final shellController = MainCitizenShellController.of(context);
+                        if (shellController != null) {
+                          shellController.onSelectTab(2);
+                        } else {
+                          context.push('/tracking');
+                        }
                       },
                     );
                   },

@@ -5,6 +5,7 @@ import '../../models/grievance_model.dart';
 import '../../providers/grievance_provider.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
+import '../main_citizen_shell.dart';
 
 class ComplaintListScreen extends ConsumerStatefulWidget {
   const ComplaintListScreen({super.key});
@@ -210,6 +211,16 @@ class _ComplaintListScreenState extends ConsumerState<ComplaintListScreen> {
     );
   }
 
+  void _navigateToTracking(GrievanceModel item) {
+    ref.read(selectedTrackingGrievanceIdProvider.notifier).state = item.id;
+    final shellController = MainCitizenShellController.of(context);
+    if (shellController != null) {
+      shellController.onSelectTab(2);
+    } else {
+      context.push('/tracking');
+    }
+  }
+
   Widget _buildGrievanceCard(GrievanceModel item) {
     final statusColor = _getStatusColor(item.status);
 
@@ -217,99 +228,102 @@ class _ComplaintListScreenState extends ConsumerState<ComplaintListScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryBlue.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    item.grievanceNumber,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      color: AppTheme.primaryBlue,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _navigateToTracking(item),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryBlue.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      item.grievanceNumber,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.primaryBlue,
+                      ),
                     ),
                   ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      item.status.replaceAll('_', ' ').toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: statusColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                item.getDisplayTitle(),
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    item.status.replaceAll('_', ' ').toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: statusColor,
-                    ),
+              ),
+              if (item.getShortBriefing() != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  item.getShortBriefing()!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppTheme.textSecondary,
+                    height: 1.3,
                   ),
                 ),
               ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              item.getDisplayTitle(),
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Icon(Icons.account_balance_rounded, size: 14, color: AppTheme.textSecondary),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      item.departmentId ?? 'Department: Auto AI Routing',
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                    ),
+                  ),
+                ],
               ),
-            ),
-            if (item.getShortBriefing() != null) ...[
-              const SizedBox(height: 6),
-              Text(
-                item.getShortBriefing()!,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: AppTheme.textSecondary,
-                  height: 1.3,
-                ),
+              const Divider(height: 20, color: AppTheme.borderLight),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TextButton.icon(
+                    onPressed: () => _navigateToTracking(item),
+                    icon: const Icon(Icons.my_location_rounded, size: 16),
+                    label: const Text('Track Timeline'),
+                  ),
+                  Text(
+                    _formatDate(item.createdAt),
+                    style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                  ),
+                ],
               ),
             ],
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                const Icon(Icons.account_balance_rounded, size: 14, color: AppTheme.textSecondary),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    item.departmentId ?? 'Department: Auto AI Routing',
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-                  ),
-                ),
-              ],
-            ),
-            const Divider(height: 20, color: AppTheme.borderLight),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                TextButton.icon(
-                  onPressed: () {
-                    context.push('/tracking');
-                  },
-                  icon: const Icon(Icons.my_location_rounded, size: 16),
-                  label: const Text('Track Timeline'),
-                ),
-                Text(
-                  _formatDate(item.createdAt),
-                  style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
     );

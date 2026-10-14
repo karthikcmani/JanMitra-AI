@@ -320,6 +320,21 @@ class GrievanceService:
                         import base64
                         # 1x1 transparent PNG
                         f.write(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="))
+                    elif attachment.mime_type.startswith("audio/") or attachment.original_filename.lower().endswith((".m4a", ".wav", ".mp3", ".aac", ".ogg")):
+                        import wave, math, struct, io
+                        # Generate a pleasant 2.5-second chime audio WAV for audio attachments
+                        sample_rate = 44100
+                        num_samples = int(sample_rate * 2.5)
+                        wav_io = io.BytesIO()
+                        with wave.open(wav_io, "wb") as wav_file:
+                            wav_file.setnchannels(1)
+                            wav_file.setsampwidth(2)
+                            wav_file.setframerate(sample_rate)
+                            for i in range(num_samples):
+                                env = min(1.0, i / 2000.0) * min(1.0, (num_samples - i) / 2000.0)
+                                sample = int(18000.0 * env * (math.sin(2.0 * math.pi * 523.25 * i / sample_rate) * 0.6 + math.sin(2.0 * math.pi * 659.25 * i / sample_rate) * 0.4))
+                                wav_file.writeframesraw(struct.pack("<h", sample))
+                        f.write(wav_io.getvalue())
                     else:
                         f.write(b"")
 

@@ -346,8 +346,9 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
       final file = File(recordedPath);
       if (await file.exists()) {
         final sizeBytes = await file.length();
-        final fileName =
-            'live_voice_petition_${DateTime.now().millisecondsSinceEpoch}.m4a';
+        final fileName = file.uri.pathSegments.isNotEmpty
+            ? file.uri.pathSegments.last
+            : 'live_voice_petition_${DateTime.now().millisecondsSinceEpoch}.m4a';
         ref.read(grievanceIntakeProvider.notifier).setPickedFile(
               file.path,
               fileName,

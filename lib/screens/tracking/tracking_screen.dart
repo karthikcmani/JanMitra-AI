@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import '../../models/grievance_model.dart';
 import '../../providers/grievance_provider.dart';
 import '../../providers/theme_provider.dart';
@@ -28,6 +29,8 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   bool _isSubmittingInterview = false;
   bool _isFullTextExpanded = false;
   final Set<String> _expandedAttachments = {};
+  FlutterTts? _flutterTts;
+  String? _speakingAttachmentId;
 
   @override
   void initState() {
@@ -37,11 +40,53 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
 
   @override
   void dispose() {
+    _flutterTts?.stop();
     _clarificationController.dispose();
     for (final controller in _interviewControllers.values) {
       controller.dispose();
     }
     super.dispose();
+  }
+
+  Future<void> _toggleSpeakTranscript(String attachmentId, String text) async {
+    if (_speakingAttachmentId == attachmentId) {
+      await _flutterTts?.stop();
+      if (mounted) {
+        setState(() {
+          _speakingAttachmentId = null;
+        });
+      }
+      return;
+    }
+
+    _flutterTts ??= FlutterTts();
+    await _flutterTts!.setLanguage('ml-IN');
+    await _flutterTts!.setSpeechRate(0.48);
+    await _flutterTts!.setVolume(1.0);
+    await _flutterTts!.setPitch(1.0);
+
+    _flutterTts!.setCompletionHandler(() {
+      if (mounted) {
+        setState(() {
+          _speakingAttachmentId = null;
+        });
+      }
+    });
+
+    _flutterTts!.setErrorHandler((msg) {
+      if (mounted) {
+        setState(() {
+          _speakingAttachmentId = null;
+        });
+      }
+    });
+
+    if (mounted) {
+      setState(() {
+        _speakingAttachmentId = attachmentId;
+      });
+    }
+    await _flutterTts!.speak(text);
   }
 
   @override
@@ -110,6 +155,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                 ),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
+                  key: ValueKey('tracking_select_$_selectedId'),
                   initialValue: _selectedId,
                   isExpanded: true,
                   dropdownColor: Theme.of(context).brightness == Brightness.dark
@@ -1531,23 +1577,62 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                       ),
                   ],
                   const SizedBox(height: 10),
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      visualDensity: VisualDensity.compact,
-                      foregroundColor: isAudio ? const Color(0xFF7C3AED) : null,
-                      side: isAudio ? const BorderSide(color: Color(0xFF7C3AED)) : null,
+                  if (isAudio)
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            visualDensity: VisualDensity.compact,
+                            backgroundColor: const Color(0xFF7C3AED),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          icon: const Icon(Icons.play_circle_filled_rounded, size: 16),
+                          label: const Text(
+                            'Listen to Voice Petition',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                          onPressed: () => _showAttachmentPreview(context, grievance.id, att),
+                        ),
+                        if (att.rawExtractedText != null && att.rawExtractedText!.isNotEmpty)
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              visualDensity: VisualDensity.compact,
+                              foregroundColor: _speakingAttachmentId == att.id ? AppTheme.danger : const Color(0xFF7C3AED),
+                              side: BorderSide(
+                                color: _speakingAttachmentId == att.id ? AppTheme.danger : const Color(0xFF7C3AED),
+                              ),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            icon: Icon(
+                              _speakingAttachmentId == att.id ? Icons.stop_circle_rounded : Icons.record_voice_over_rounded,
+                              size: 16,
+                            ),
+                            label: Text(
+                              _speakingAttachmentId == att.id ? 'Stop Speech' : 'Speak Petition (TTS)',
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                            onPressed: () => _toggleSpeakTranscript(att.id, att.rawExtractedText!),
+                          ),
+                      ],
+                    )
+                  else
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      icon: const Icon(Icons.remove_red_eye_outlined, size: 16),
+                      label: const Text(
+                        'View Original Document',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: () => _showAttachmentPreview(context, grievance.id, att),
                     ),
-                    icon: Icon(
-                      isAudio ? Icons.play_circle_outline_rounded : Icons.remove_red_eye_outlined,
-                      size: 16,
-                    ),
-                    label: Text(
-                      isAudio ? 'Listen to Voice Petition' : 'View Original Document',
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                    ),
-                    onPressed: () => _showAttachmentPreview(context, grievance.id, att),
-                  ),
                 ],
               ),
             );
