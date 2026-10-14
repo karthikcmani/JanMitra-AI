@@ -232,24 +232,25 @@ class OfficialService:
         return [await self._build_official_detail_response(g) for g in grievances]
 
     async def _build_official_detail_response(self, g: Grievance) -> OfficialGrievanceDetailResponse:
-        # Fetch citizen user details (uses preloaded relationship if available)
-        citizen = g.citizen
+        # Fetch citizen user details safely without triggering lazy-load MissingGreenlet
+        citizen = g.__dict__.get("citizen")
         if not citizen and g.citizen_id:
             citizen_res = await self.db.execute(select(User).where(User.id == g.citizen_id))
             citizen = citizen_res.scalar_one_or_none()
 
         assigned_off_name = None
-        if g.assigned_official:
-            assigned_off_name = g.assigned_official.full_name
+        assigned_off = g.__dict__.get("assigned_official")
+        if assigned_off:
+            assigned_off_name = assigned_off.full_name
         elif getattr(g, "assigned_official_id", None):
             off_res = await self.db.execute(select(User).where(User.id == g.assigned_official_id))
             off_user = off_res.scalar_one_or_none()
             if off_user:
                 assigned_off_name = off_user.full_name
 
-        # Fetch attachments (uses preloaded collection if available)
-        attachments = g.attachments if hasattr(g, "attachments") and g.attachments is not None else []
-        if not attachments:
+        # Fetch attachments safely without triggering lazy-load MissingGreenlet
+        attachments = g.__dict__.get("attachments")
+        if attachments is None:
             atts_res = await self.db.execute(
                 select(GrievanceAttachment).where(GrievanceAttachment.grievance_id == g.id)
             )
@@ -260,17 +261,17 @@ class OfficialService:
             [a.raw_extracted_text for a in attachments if a.raw_extracted_text]
         )
 
-        # Fetch analysis (uses preloaded object if available)
-        analysis = g.analysis
-        if not analysis:
+        # Fetch analysis safely without triggering lazy-load MissingGreenlet
+        analysis = g.__dict__.get("analysis")
+        if analysis is None:
             analysis_res = await self.db.execute(
                 select(GrievanceAnalysis).where(GrievanceAnalysis.grievance_id == g.id)
             )
             analysis = analysis_res.scalar_one_or_none()
 
-        # Fetch audit logs (uses preloaded collection if available)
-        audit_logs = g.audit_logs if hasattr(g, "audit_logs") and g.audit_logs is not None else []
-        if not audit_logs:
+        # Fetch audit logs safely without triggering lazy-load MissingGreenlet
+        audit_logs = g.__dict__.get("audit_logs")
+        if audit_logs is None:
             logs_res = await self.db.execute(
                 select(GrievanceAuditLog)
                 .where(GrievanceAuditLog.grievance_id == g.id)
@@ -535,8 +536,17 @@ class OfficialService:
     async def update_official_action(
         self, grievance_id: str, official_id: str, action_in: OfficialActionRequest
     ) -> OfficialGrievanceDetailResponse:
+        from sqlalchemy.orm import selectinload
         grievance_res = await self.db.execute(
-            select(Grievance).where(Grievance.id == grievance_id)
+            select(Grievance)
+            .options(
+                selectinload(Grievance.attachments),
+                selectinload(Grievance.audit_logs),
+                selectinload(Grievance.citizen),
+                selectinload(Grievance.assigned_official),
+                selectinload(Grievance.analysis),
+            )
+            .where(Grievance.id == grievance_id)
         )
         grievance = grievance_res.scalar_one_or_none()
         if not grievance:
@@ -545,6 +555,7 @@ class OfficialService:
             )
 
         prev_status = grievance.status
+        prev_dept = grievance.department_id
 
         # 1. Update department forwarding and associated category
         if action_in.department_name:

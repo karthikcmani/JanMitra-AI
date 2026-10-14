@@ -14,6 +14,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/grievance_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/constants.dart';
+import '../../utils/grievance_validator.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_text_field.dart';
 
@@ -72,6 +73,9 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
   @override
   void initState() {
     super.initState();
+    _verifiedTextController.addListener(() {
+      if (mounted) setState(() {});
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkPendingAutoLaunch();
     });
@@ -446,6 +450,19 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
         state.rawExtractedText!.trim().isNotEmpty) {
       _verifiedTextController.text = state.rawExtractedText!;
       _detectPetitionerFromExtractedText(state.rawExtractedText!);
+
+      final val = GrievanceValidator.validateGrievanceText(state.rawExtractedText!);
+      if (val.isChitChat && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              '⚠️ Casual greeting/chit-chat detected. Please edit or re-record to describe a specific civic problem.',
+            ),
+            backgroundColor: AppTheme.warning,
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
     } else if (state.errorMessage != null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -588,6 +605,13 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
       return;
     }
 
+    // Content validity check: reject casual greetings / non-grievance chitchat
+    final validation = GrievanceValidator.validateGrievanceText(_verifiedTextController.text);
+    if (!validation.isValid) {
+      _showInvalidGrievanceDialog(validation);
+      return;
+    }
+
     final shouldProceed = await _promptDuplicateWarningIfAny(
       title: ref.read(grievanceIntakeProvider).selectedFileName,
       text: _verifiedTextController.text,
@@ -628,6 +652,14 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
           backgroundColor: AppTheme.danger,
         ),
       );
+      return;
+    }
+
+    // Content validity check: reject casual greetings / non-grievance chitchat
+    final combined = '${_directTitleController.text.trim()} ${_directTextController.text.trim()}';
+    final validation = GrievanceValidator.validateGrievanceText(combined);
+    if (!validation.isValid) {
+      _showInvalidGrievanceDialog(validation);
       return;
     }
 
@@ -687,6 +719,109 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
               context.pop();
             },
             child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showInvalidGrievanceDialog(GrievanceValidationResult val) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.warning_amber_rounded, size: 44, color: AppTheme.warning),
+        title: Text(val.isChitChat ? 'Non-Civic Content Detected' : 'Invalid Petition Content'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              val.reason ?? 'The provided text does not contain a valid public grievance.',
+              style: const TextStyle(fontSize: 13, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                val.suggestion ??
+                    'Please describe an actual public problem (such as road damage, power cut, water shortage, garbage, or land survey).',
+                style: TextStyle(fontSize: 12, color: Colors.blue.shade900),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
+            child: const Text('Edit Petition'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGrievanceContentValidationBanner(String text) {
+    if (text.trim().isEmpty) return const SizedBox.shrink();
+    final val = GrievanceValidator.validateGrievanceText(text);
+    if (val.isValid) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: val.isChitChat ? Colors.amber.shade50 : Colors.red.shade50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: val.isChitChat ? Colors.amber.shade400 : Colors.red.shade300,
+          width: 1.2,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            val.isChitChat ? Icons.warning_amber_rounded : Icons.info_outline_rounded,
+            color: val.isChitChat ? Colors.amber.shade900 : AppTheme.danger,
+            size: 22,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  val.isChitChat
+                      ? 'Non-Civic Content Detected (Casual Greeting / Chit-chat)'
+                      : 'Petition Content Needs Clarification',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: val.isChitChat ? Colors.amber.shade900 : AppTheme.danger,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  val.reason ?? 'The entered text does not describe a valid civic grievance.',
+                  style: const TextStyle(fontSize: 12, height: 1.3, color: Colors.black87),
+                ),
+                if (val.suggestion != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    '💡 Tip: ${val.suggestion!}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.blue.shade900,
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ],
       ),
@@ -1231,6 +1366,7 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
             ),
             style: const TextStyle(fontSize: 15),
           ),
+          _buildGrievanceContentValidationBanner(_verifiedTextController.text),
           _buildPetitionerIdentitySection(isDark),
           const SizedBox(height: 12),
 
@@ -1656,6 +1792,7 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
             ),
             style: const TextStyle(fontSize: 15),
           ),
+          _buildGrievanceContentValidationBanner(_verifiedTextController.text),
           _buildPetitionerIdentitySection(isDark),
           const SizedBox(height: 12),
 

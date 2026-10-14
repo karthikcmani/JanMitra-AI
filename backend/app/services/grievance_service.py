@@ -73,6 +73,17 @@ class GrievanceService:
     async def create_draft(
         self, citizen_id: str, draft_in: GrievanceDraftCreate
     ) -> GrievanceResponse:
+        # Validate direct text to prevent casual chitchat or non-grievance submissions
+        if draft_in.intake_mode == "direct_text":
+            from app.services.grievance_validator import validate_grievance_text
+            content_to_check = f"{draft_in.title or ''} {draft_in.description or ''} {draft_in.original_text or ''}".strip()
+            val_result = validate_grievance_text(content_to_check)
+            if not val_result.is_valid:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"{val_result.reason} {val_result.suggestion or ''}".strip(),
+                )
+
         grievance_no = self._generate_grievance_number()
         db_grievance = await self.repo.create_grievance(
             citizen_id=citizen_id,
@@ -538,6 +549,15 @@ class GrievanceService:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Grievance not found.",
+            )
+
+        # Content validity check: reject casual greetings / non-grievance chitchat
+        from app.services.grievance_validator import validate_grievance_text
+        val_result = validate_grievance_text(verified_text)
+        if not val_result.is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"{val_result.reason} {val_result.suggestion or ''}".strip(),
             )
 
         prev_status = grievance.status
