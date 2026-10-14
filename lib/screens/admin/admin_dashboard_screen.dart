@@ -18,6 +18,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   String _selectedStatusFilter = 'ALL';
   String _selectedDeptFilter = 'ALL';
   String _selectedPriorityFilter = 'ALL';
+  bool _filterToday = false;
   bool _isSearching = false;
   List<GrievanceModel>? _searchResults;
 
@@ -27,11 +28,26 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     super.dispose();
   }
 
-  void _triggerSearch({String? status, String? dept, String? priority}) async {
+  void _triggerSearch({
+    String? status,
+    String? dept,
+    String? priority,
+    bool? todayOnly,
+    bool resetOthers = false,
+  }) async {
     final query = _searchController.text.trim();
-    if (status != null) _selectedStatusFilter = status;
-    if (dept != null) _selectedDeptFilter = dept;
-    if (priority != null) _selectedPriorityFilter = priority;
+    if (resetOthers) {
+      _selectedStatusFilter = status ?? 'ALL';
+      _selectedDeptFilter = dept ?? 'ALL';
+      _selectedPriorityFilter = priority ?? 'ALL';
+      _filterToday = todayOnly ?? false;
+      _searchController.clear();
+    } else {
+      if (status != null) _selectedStatusFilter = status;
+      if (dept != null) _selectedDeptFilter = dept;
+      if (priority != null) _selectedPriorityFilter = priority;
+      if (todayOnly != null) _filterToday = todayOnly;
+    }
 
     final effectiveStatus = _selectedStatusFilter == 'ALL' ? null : _selectedStatusFilter.toLowerCase();
     final effectiveDept = _selectedDeptFilter == 'ALL' ? null : _selectedDeptFilter;
@@ -48,6 +64,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         status: effectiveStatus,
         departmentId: effectiveDept,
         priority: effectivePriority,
+        todayOnly: _filterToday,
       );
       if (mounted) {
         setState(() {
@@ -487,6 +504,35 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                         child: Row(
                           children: [
                             FilterChip(
+                              label: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.today_rounded, size: 16, color: Colors.teal),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    summaryAsync.asData?.value != null
+                                        ? "Today's Cases (${summaryAsync.asData!.value.todayReceived})"
+                                        : "Today's Cases",
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                              selected: _filterToday,
+                              selectedColor: Colors.teal.withValues(alpha: 0.18),
+                              checkmarkColor: Colors.teal,
+                              side: BorderSide(
+                                color: _filterToday ? Colors.teal : Colors.grey.shade300,
+                                width: _filterToday ? 1.5 : 1.0,
+                              ),
+                              onSelected: (selected) {
+                                setState(() {
+                                  _filterToday = selected;
+                                });
+                                _triggerSearch();
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                            FilterChip(
                               label: const Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -555,17 +601,30 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                             ),
                             const SizedBox(width: 8),
                             FilterChip(
-                              label: const Text('All Grievances', style: TextStyle(fontSize: 12)),
-                              selected: _selectedStatusFilter == 'ALL' && _selectedPriorityFilter == 'ALL' && _selectedDeptFilter == 'ALL' && !_isSearching,
+                              label: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.folder_special_rounded, size: 16, color: AppTheme.primaryBlue),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    summaryAsync.asData?.value != null
+                                        ? "All Grievances (${summaryAsync.asData!.value.totalGrievances})"
+                                        : "All Grievances",
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                              selected: _selectedStatusFilter == 'ALL' && _selectedPriorityFilter == 'ALL' && _selectedDeptFilter == 'ALL' && !_filterToday && _isSearching,
+                              selectedColor: AppTheme.primaryBlue.withValues(alpha: 0.18),
+                              checkmarkColor: AppTheme.primaryBlue,
+                              side: BorderSide(
+                                color: (_selectedStatusFilter == 'ALL' && _selectedPriorityFilter == 'ALL' && _selectedDeptFilter == 'ALL' && !_filterToday && _isSearching)
+                                    ? AppTheme.primaryBlue
+                                    : Colors.grey.shade300,
+                                width: 1.5,
+                              ),
                               onSelected: (selected) {
-                                setState(() {
-                                  _searchController.clear();
-                                  _selectedStatusFilter = 'ALL';
-                                  _selectedDeptFilter = 'ALL';
-                                  _selectedPriorityFilter = 'ALL';
-                                  _isSearching = false;
-                                  _searchResults = null;
-                                });
+                                _triggerSearch(status: 'ALL', dept: 'ALL', priority: 'ALL', todayOnly: false, resetOthers: true);
                               },
                             ),
                           ],
@@ -576,6 +635,22 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                         scrollDirection: Axis.horizontal,
                         child: Row(
                           children: [
+                            const Text('Date: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            DropdownButton<String>(
+                              value: _filterToday ? 'today' : 'ALL',
+                              style: const TextStyle(fontSize: 12, color: Colors.black),
+                              items: const [
+                                DropdownMenuItem(value: 'ALL', child: Text('All Dates')),
+                                DropdownMenuItem(value: 'today', child: Text("📅 Today's Petitions")),
+                              ],
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setState(() => _filterToday = (val == 'today'));
+                                  _triggerSearch();
+                                }
+                              },
+                            ),
+                            const SizedBox(width: 14),
                             const Text('Priority: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                             DropdownButton<String>(
                               value: _selectedPriorityFilter,
@@ -647,7 +722,51 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
 
               // Search Results vs Needs Attention Queue
               if (_isSearching && _searchResults != null) ...[
-                // High Priority Active Banner
+                // Active Filter Banners
+                if (_filterToday) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.teal.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.teal.withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.today_rounded, size: 18, color: Colors.teal),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            "Filtered: Today's Received Grievances (Registered Today UTC/IST)",
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.teal,
+                            ),
+                          ),
+                        ),
+                        InkWell(
+                          onTap: () {
+                            setState(() => _filterToday = false);
+                            _triggerSearch();
+                          },
+                          child: const Padding(
+                            padding: EdgeInsets.all(4.0),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('Clear', style: TextStyle(fontSize: 11, color: Colors.teal, fontWeight: FontWeight.bold)),
+                                SizedBox(width: 2),
+                                Icon(Icons.close_rounded, size: 14, color: Colors.teal),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 if (_selectedPriorityFilter == 'high' || _selectedPriorityFilter == 'critical') ...[
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -698,11 +817,25 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      _selectedPriorityFilter == 'high'
-                          ? '🔥 High Priority Results (${_searchResults!.length})'
-                          : _selectedPriorityFilter == 'critical'
-                              ? '⚡ Critical Results (${_searchResults!.length})'
-                              : 'Search Results (${_searchResults!.length})',
+                      _filterToday
+                          ? "📅 Today's Received Grievances (${_searchResults!.length})"
+                          : _selectedPriorityFilter == 'high'
+                              ? '🔥 High Priority Results (${_searchResults!.length})'
+                              : _selectedPriorityFilter == 'critical'
+                                  ? '⚡ Critical Results (${_searchResults!.length})'
+                                  : _selectedStatusFilter == 'intake_received'
+                                      ? '⏳ Intake Pending Grievances (${_searchResults!.length})'
+                                      : _selectedStatusFilter == 'under_processing'
+                                          ? '⚙️ Active Under Processing (${_searchResults!.length})'
+                                          : _selectedStatusFilter == 'clarification_required'
+                                              ? '❓ Clarification Required (${_searchResults!.length})'
+                                              : _selectedStatusFilter == 'forwarded'
+                                                  ? '↗️ Department Forwarded (${_searchResults!.length})'
+                                                  : _selectedStatusFilter == 'resolved'
+                                                      ? '✅ Resolved Grievances (${_searchResults!.length})'
+                                                      : (_selectedStatusFilter == 'ALL' && _selectedDeptFilter == 'ALL' && _selectedPriorityFilter == 'ALL' && _searchController.text.isEmpty)
+                                                          ? '📋 All Statewide Grievances (${_searchResults!.length})'
+                                                          : 'Search Results (${_searchResults!.length})',
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
                     TextButton(
@@ -712,6 +845,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                           _selectedStatusFilter = 'ALL';
                           _selectedDeptFilter = 'ALL';
                           _selectedPriorityFilter = 'ALL';
+                          _filterToday = false;
                           _isSearching = false;
                           _searchResults = null;
                         });
@@ -901,14 +1035,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           children: [
             Expanded(
               child: _statCard('Total', summary.totalGrievances.toString(), AppTheme.primaryBlue, Icons.folder_special_rounded, () {
-                setState(() {
-                  _searchController.clear();
-                  _selectedStatusFilter = 'ALL';
-                  _selectedDeptFilter = 'ALL';
-                  _selectedPriorityFilter = 'ALL';
-                  _isSearching = false;
-                  _searchResults = null;
-                });
+                _triggerSearch(status: 'ALL', dept: 'ALL', priority: 'ALL', todayOnly: false, resetOthers: true);
               }),
             ),
             const SizedBox(width: 8),
@@ -954,7 +1081,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
             const SizedBox(width: 8),
             Expanded(
               child: _statCard('Today', summary.todayReceived.toString(), Colors.teal, Icons.today_rounded, () {
-                _triggerSearch();
+                _triggerSearch(todayOnly: true, resetOthers: true);
               }),
             ),
           ],

@@ -54,6 +54,7 @@ async def search_grievances_for_official(
     priority: Optional[str] = None,
     department_id: Optional[str] = None,
     category: Optional[str] = None,
+    today_only: Optional[bool] = False,
     db: AsyncSession = Depends(get_db),
     current_user: UserResponse = Depends(get_current_official_or_admin),
 ):
@@ -66,6 +67,7 @@ async def search_grievances_for_official(
             priority=priority,
             department_id=effective_dept,
             category=category,
+            today_only=today_only,
         )
     except HTTPException:
         raise

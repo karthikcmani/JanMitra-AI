@@ -160,6 +160,7 @@ class OfficialRepository {
     String? priority,
     String? departmentId,
     String? category,
+    bool? todayOnly,
   }) async {
     final queryParams = <String, dynamic>{};
     if (query != null && query.isNotEmpty) queryParams['query'] = query;
@@ -167,6 +168,7 @@ class OfficialRepository {
     if (priority != null && priority.isNotEmpty) queryParams['priority'] = priority;
     if (departmentId != null && departmentId.isNotEmpty) queryParams['department_id'] = departmentId;
     if (category != null && category.isNotEmpty) queryParams['category'] = category;
+    if (todayOnly == true) queryParams['today_only'] = true;
 
     final response = await apiService.get('/official/grievances/search', queryParameters: queryParams);
     final list = response.data as List<dynamic>;

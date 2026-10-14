@@ -11,12 +11,14 @@ class OfficialSearchFilterState {
   final String status;
   final String? priority;
   final String? departmentId;
+  final bool todayOnly;
 
   const OfficialSearchFilterState({
     this.query = '',
     this.status = 'ALL',
     this.priority,
     this.departmentId,
+    this.todayOnly = false,
   });
 
   OfficialSearchFilterState copyWith({
@@ -24,6 +26,7 @@ class OfficialSearchFilterState {
     String? status,
     String? priority,
     String? departmentId,
+    bool? todayOnly,
     bool clearPriority = false,
     bool clearDept = false,
   }) {
@@ -32,6 +35,7 @@ class OfficialSearchFilterState {
       status: status ?? this.status,
       priority: clearPriority ? null : (priority ?? this.priority),
       departmentId: clearDept ? null : (departmentId ?? this.departmentId),
+      todayOnly: todayOnly ?? this.todayOnly,
     );
   }
 }
@@ -56,6 +60,7 @@ final officialFilteredGrievancesProvider = FutureProvider.autoDispose<List<Griev
     status: filter.status == 'ALL' ? null : filter.status.toLowerCase(),
     priority: filter.priority,
     departmentId: effectiveDept,
+    todayOnly: filter.todayOnly,
   );
 });
 
@@ -598,7 +603,9 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                 summary.pending.toString(),
                 Icons.pending_actions_rounded,
                 AppTheme.warning,
-                () => _clearFilters(),
+                () {
+                  ref.read(officialFilterNotifierProvider.notifier).update((s) => s.copyWith(status: 'INTAKE_RECEIVED', todayOnly: false));
+                },
               ),
             ),
           ],
@@ -613,19 +620,19 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
                 Icons.priority_high_rounded,
                 AppTheme.danger,
                 () {
-                  ref.read(officialFilterNotifierProvider.notifier).update((s) => s.copyWith(priority: 'high'));
+                  ref.read(officialFilterNotifierProvider.notifier).update((s) => s.copyWith(priority: 'high', todayOnly: false));
                 },
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: _buildStatCard(
-                'Clarification Req.',
-                summary.clarificationRequired.toString(),
-                Icons.help_outline_rounded,
-                const Color(0xFF7C3AED),
+                'Today Received',
+                summary.todayReceived.toString(),
+                Icons.today_rounded,
+                Colors.teal,
                 () {
-                  ref.read(officialFilterNotifierProvider.notifier).update((s) => s.copyWith(status: 'CLARIFICATION_REQUIRED'));
+                  ref.read(officialFilterNotifierProvider.notifier).update((s) => s.copyWith(todayOnly: true));
                 },
               ),
             ),
@@ -715,22 +722,36 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              children: ['ALL', 'INTAKE_RECEIVED', 'FORWARDED', 'CLARIFICATION_REQUIRED', 'UNDER_PROCESSING', 'RESOLVED'].map((st) {
-                final isSel = currentFilter.status == st;
-                return Padding(
+              children: [
+                Padding(
                   padding: const EdgeInsets.only(right: 6),
-                  child: ChoiceChip(
-                    label: Text(st.replaceAll('_', ' '), style: TextStyle(fontSize: 11, color: isSel ? Colors.white : AppTheme.textPrimary)),
-                    selected: isSel,
-                    selectedColor: AppTheme.primaryBlue,
+                  child: FilterChip(
+                    avatar: Icon(Icons.today_rounded, size: 14, color: currentFilter.todayOnly ? Colors.white : Colors.teal),
+                    label: Text("Today's Petitions", style: TextStyle(fontSize: 11, color: currentFilter.todayOnly ? Colors.white : Colors.teal.shade800, fontWeight: FontWeight.bold)),
+                    selected: currentFilter.todayOnly,
+                    selectedColor: Colors.teal,
                     onSelected: (val) {
-                      if (val) {
-                        ref.read(officialFilterNotifierProvider.notifier).update((s) => s.copyWith(status: st));
-                      }
+                      ref.read(officialFilterNotifierProvider.notifier).update((s) => s.copyWith(todayOnly: val));
                     },
                   ),
-                );
-              }).toList(),
+                ),
+                ...['ALL', 'INTAKE_RECEIVED', 'FORWARDED', 'CLARIFICATION_REQUIRED', 'UNDER_PROCESSING', 'RESOLVED'].map((st) {
+                  final isSel = currentFilter.status == st;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ChoiceChip(
+                      label: Text(st.replaceAll('_', ' '), style: TextStyle(fontSize: 11, color: isSel ? Colors.white : AppTheme.textPrimary)),
+                      selected: isSel,
+                      selectedColor: AppTheme.primaryBlue,
+                      onSelected: (val) {
+                        if (val) {
+                          ref.read(officialFilterNotifierProvider.notifier).update((s) => s.copyWith(status: st));
+                        }
+                      },
+                    ),
+                  );
+                }),
+              ],
             ),
           ),
         ],

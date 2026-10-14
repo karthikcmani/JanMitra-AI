@@ -722,6 +722,7 @@ class OfficialService:
         priority: Optional[str] = None,
         department_id: Optional[str] = None,
         category: Optional[str] = None,
+        today_only: Optional[bool] = False,
     ) -> List[OfficialGrievanceDetailResponse]:
         from sqlalchemy.orm import selectinload
         stmt = (
@@ -739,7 +740,18 @@ class OfficialService:
         raw_grievances = res.scalars().all()
         matched = []
 
+        now_utc = datetime.now(timezone.utc)
+        start_of_today = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+
         for g in raw_grievances:
+            if today_only:
+                g_dt = g.created_at
+                if not g_dt:
+                    continue
+                if g_dt.tzinfo is None:
+                    g_dt = g_dt.replace(tzinfo=timezone.utc)
+                if g_dt < start_of_today:
+                    continue
             if status and g.status.lower() != status.lower():
                 continue
             if priority:
