@@ -17,6 +17,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _selectedStatusFilter = 'ALL';
   String _selectedDeptFilter = 'ALL';
+  String _selectedPriorityFilter = 'ALL';
   bool _isSearching = false;
   List<GrievanceModel>? _searchResults;
 
@@ -28,13 +29,16 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
 
   void _triggerSearch({String? status, String? dept, String? priority}) async {
     final query = _searchController.text.trim();
-    final effectiveStatus = status ?? (_selectedStatusFilter == 'ALL' ? null : _selectedStatusFilter.toLowerCase());
-    final effectiveDept = dept ?? (_selectedDeptFilter == 'ALL' ? null : _selectedDeptFilter);
+    if (status != null) _selectedStatusFilter = status;
+    if (dept != null) _selectedDeptFilter = dept;
+    if (priority != null) _selectedPriorityFilter = priority;
+
+    final effectiveStatus = _selectedStatusFilter == 'ALL' ? null : _selectedStatusFilter.toLowerCase();
+    final effectiveDept = _selectedDeptFilter == 'ALL' ? null : _selectedDeptFilter;
+    final effectivePriority = _selectedPriorityFilter == 'ALL' ? null : _selectedPriorityFilter.toLowerCase();
 
     setState(() {
       _isSearching = true;
-      if (status != null) _selectedStatusFilter = status;
-      if (dept != null) _selectedDeptFilter = dept;
     });
 
     try {
@@ -43,7 +47,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         query: query.isNotEmpty ? query : null,
         status: effectiveStatus,
         departmentId: effectiveDept,
-        priority: priority,
+        priority: effectivePriority,
       );
       if (mounted) {
         setState(() {
@@ -477,10 +481,120 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                         ],
                       ),
                       const SizedBox(height: 10),
+                      // Quick Filter Action Chips
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
                           children: [
+                            FilterChip(
+                              label: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.local_fire_department_rounded, size: 16, color: Colors.deepOrange),
+                                  SizedBox(width: 4),
+                                  Text('High Priority Cases', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                ],
+                              ),
+                              selected: _selectedPriorityFilter == 'high',
+                              selectedColor: Colors.deepOrange.withValues(alpha: 0.18),
+                              checkmarkColor: Colors.deepOrange,
+                              side: BorderSide(
+                                color: _selectedPriorityFilter == 'high' ? Colors.deepOrange : Colors.grey.shade300,
+                                width: _selectedPriorityFilter == 'high' ? 1.5 : 1.0,
+                              ),
+                              onSelected: (selected) {
+                                setState(() {
+                                  _selectedPriorityFilter = selected ? 'high' : 'ALL';
+                                });
+                                _triggerSearch();
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                            FilterChip(
+                              label: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.bolt_rounded, size: 16, color: AppTheme.danger),
+                                  SizedBox(width: 4),
+                                  Text('Critical Severity', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                ],
+                              ),
+                              selected: _selectedPriorityFilter == 'critical',
+                              selectedColor: AppTheme.danger.withValues(alpha: 0.18),
+                              checkmarkColor: AppTheme.danger,
+                              side: BorderSide(
+                                color: _selectedPriorityFilter == 'critical' ? AppTheme.danger : Colors.grey.shade300,
+                                width: _selectedPriorityFilter == 'critical' ? 1.5 : 1.0,
+                              ),
+                              onSelected: (selected) {
+                                setState(() {
+                                  _selectedPriorityFilter = selected ? 'critical' : 'ALL';
+                                });
+                                _triggerSearch();
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                            FilterChip(
+                              label: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.hourglass_top_rounded, size: 16, color: Colors.orange),
+                                  SizedBox(width: 4),
+                                  Text('Intake Pending', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                                ],
+                              ),
+                              selected: _selectedStatusFilter == 'intake_received',
+                              selectedColor: Colors.orange.withValues(alpha: 0.18),
+                              checkmarkColor: Colors.orange,
+                              onSelected: (selected) {
+                                setState(() {
+                                  _selectedStatusFilter = selected ? 'intake_received' : 'ALL';
+                                });
+                                _triggerSearch();
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                            FilterChip(
+                              label: const Text('All Grievances', style: TextStyle(fontSize: 12)),
+                              selected: _selectedStatusFilter == 'ALL' && _selectedPriorityFilter == 'ALL' && _selectedDeptFilter == 'ALL' && !_isSearching,
+                              onSelected: (selected) {
+                                setState(() {
+                                  _searchController.clear();
+                                  _selectedStatusFilter = 'ALL';
+                                  _selectedDeptFilter = 'ALL';
+                                  _selectedPriorityFilter = 'ALL';
+                                  _isSearching = false;
+                                  _searchResults = null;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            const Text('Priority: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            DropdownButton<String>(
+                              value: _selectedPriorityFilter,
+                              style: const TextStyle(fontSize: 12, color: Colors.black),
+                              items: const [
+                                DropdownMenuItem(value: 'ALL', child: Text('All Priorities')),
+                                DropdownMenuItem(value: 'high', child: Text('🔥 High Priority (High & Critical)')),
+                                DropdownMenuItem(value: 'critical', child: Text('⚡ Critical Cases Only')),
+                                DropdownMenuItem(value: 'medium', child: Text('Medium Priority')),
+                                DropdownMenuItem(value: 'low', child: Text('Low Priority')),
+                              ],
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setState(() => _selectedPriorityFilter = val);
+                                  _triggerSearch();
+                                }
+                              },
+                            ),
+                            const SizedBox(width: 14),
                             const Text('Status: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                             DropdownButton<String>(
                               value: _selectedStatusFilter,
@@ -501,7 +615,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                                 }
                               },
                             ),
-                            const SizedBox(width: 16),
+                            const SizedBox(width: 14),
                             const Text('Department: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                             DropdownButton<String>(
                               value: _selectedDeptFilter,
@@ -533,26 +647,103 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
 
               // Search Results vs Needs Attention Queue
               if (_isSearching && _searchResults != null) ...[
+                // High Priority Active Banner
+                if (_selectedPriorityFilter == 'high' || _selectedPriorityFilter == 'critical') ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.danger.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.danger.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.warning_amber_rounded, size: 18, color: AppTheme.danger),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _selectedPriorityFilter == 'critical'
+                                ? 'Filtered: Critical Severity Cases Only (Urgent Emergency / Safety SLA: 2-3 Days)'
+                                : 'Filtered: High Priority Cases (Critical & High Severity Issues)',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.danger,
+                            ),
+                          ),
+                        ),
+                        InkWell(
+                          onTap: () {
+                            setState(() => _selectedPriorityFilter = 'ALL');
+                            _triggerSearch();
+                          },
+                          child: const Padding(
+                            padding: EdgeInsets.all(4.0),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('Clear', style: TextStyle(fontSize: 11, color: AppTheme.danger, fontWeight: FontWeight.bold)),
+                                SizedBox(width: 2),
+                                Icon(Icons.close_rounded, size: 14, color: AppTheme.danger),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Search Results (${_searchResults!.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text(
+                      _selectedPriorityFilter == 'high'
+                          ? '🔥 High Priority Results (${_searchResults!.length})'
+                          : _selectedPriorityFilter == 'critical'
+                              ? '⚡ Critical Results (${_searchResults!.length})'
+                              : 'Search Results (${_searchResults!.length})',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
                     TextButton(
                       onPressed: () {
                         setState(() {
                           _searchController.clear();
                           _selectedStatusFilter = 'ALL';
                           _selectedDeptFilter = 'ALL';
+                          _selectedPriorityFilter = 'ALL';
                           _isSearching = false;
                           _searchResults = null;
                         });
                       },
-                      child: const Text('Clear Search'),
+                      child: const Text('Reset All Filters'),
                     ),
                   ],
                 ),
                 const SizedBox(height: 10),
-                ..._searchResults!.map((g) => _buildGrievanceAdminCard(g)),
+                if (_searchResults!.isEmpty) ...[
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: Center(
+                        child: Column(
+                          children: [
+                            const Icon(Icons.search_off_rounded, size: 40, color: Colors.grey),
+                            const SizedBox(height: 8),
+                            Text(
+                              _selectedPriorityFilter == 'high' || _selectedPriorityFilter == 'critical'
+                                  ? 'No high priority grievances match the selected criteria.'
+                                  : 'No grievances found matching the search filters.',
+                              style: const TextStyle(fontSize: 13, color: Colors.grey),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ] else
+                  ..._searchResults!.map((g) => _buildGrievanceAdminCard(g)),
               ] else ...[
                 const Text('Administrative Attention Queue', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 10),
@@ -671,6 +862,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   _searchController.clear();
                   _selectedStatusFilter = 'ALL';
                   _selectedDeptFilter = 'ALL';
+                  _selectedPriorityFilter = 'ALL';
                   _isSearching = false;
                   _searchResults = null;
                 });
@@ -774,21 +966,98 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(item.grievanceNumber, style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue, fontSize: 13)),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: _getStatusColor(item.status).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      item.status.replaceAll('_', ' ').toUpperCase(),
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _getStatusColor(item.status)),
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: (item.priority.toLowerCase() == 'critical'
+                                  ? AppTheme.danger
+                                  : item.priority.toLowerCase() == 'high'
+                                      ? Colors.deepOrange
+                                      : Colors.blueGrey)
+                              .withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: (item.priority.toLowerCase() == 'critical'
+                                    ? AppTheme.danger
+                                    : item.priority.toLowerCase() == 'high'
+                                        ? Colors.deepOrange
+                                        : Colors.blueGrey)
+                                .withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (item.priority.toLowerCase() == 'critical' || item.priority.toLowerCase() == 'high')
+                              Icon(
+                                item.priority.toLowerCase() == 'critical' ? Icons.bolt_rounded : Icons.local_fire_department_rounded,
+                                size: 12,
+                                color: item.priority.toLowerCase() == 'critical' ? AppTheme.danger : Colors.deepOrange,
+                              ),
+                            if (item.priority.toLowerCase() == 'critical' || item.priority.toLowerCase() == 'high')
+                              const SizedBox(width: 3),
+                            Text(
+                              '${item.priority.toUpperCase()} (${item.priorityScore ?? 50})',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: item.priority.toLowerCase() == 'critical'
+                                    ? AppTheme.danger
+                                    : item.priority.toLowerCase() == 'high'
+                                        ? Colors.deepOrange
+                                        : Colors.blueGrey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: _getStatusColor(item.status).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          item.status.replaceAll('_', ' ').toUpperCase(),
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _getStatusColor(item.status)),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
               const SizedBox(height: 6),
               Text(item.title ?? 'No Title', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+              if (item.petitionerName != null && item.petitionerName!.isNotEmpty) ...[
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    Icon(
+                      item.filingType == 'on_behalf' ? Icons.people_outline_rounded : Icons.verified_user_rounded,
+                      size: 13,
+                      color: item.filingType == 'on_behalf' ? const Color(0xFF7C3AED) : AppTheme.success,
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        item.filingType == 'on_behalf'
+                            ? 'On Behalf: ${item.petitionerName}${item.relationship != null ? " (${item.relationship})" : ""}'
+                            : 'Complainant: ${item.petitionerName}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: item.filingType == 'on_behalf' ? const Color(0xFF7C3AED) : AppTheme.success,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 4),
               Text(
                 item.description ?? '',

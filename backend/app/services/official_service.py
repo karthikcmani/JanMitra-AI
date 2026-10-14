@@ -739,8 +739,23 @@ class OfficialService:
         for g in raw_grievances:
             if status and g.status.lower() != status.lower():
                 continue
-            if priority and g.priority.lower() != priority.lower():
-                continue
+            if priority:
+                p_query = priority.lower()
+                g_prio = (g.priority or "medium").lower()
+                if p_query in ("high", "high_priority"):
+                    if g_prio not in ("high", "critical"):
+                        continue
+                elif p_query == "critical":
+                    if g_prio != "critical":
+                        continue
+                elif p_query == "medium":
+                    if g_prio != "medium":
+                        continue
+                elif p_query == "low":
+                    if g_prio != "low":
+                        continue
+                elif g_prio != p_query:
+                    continue
             if department_id:
                 effective_dept = (g.department_id or (g.analysis.predicted_category if g.analysis and g.analysis.predicted_category else "")).lower()
                 dept_query = department_id.lower()
@@ -775,6 +790,15 @@ class OfficialService:
                 if not text_match:
                     continue
             matched.append(g)
+
+        if priority:
+            matched.sort(
+                key=lambda x: (
+                    x.priority_score if x.priority_score is not None else 50,
+                    x.created_at.timestamp() if hasattr(x.created_at, "timestamp") else 0.0,
+                ),
+                reverse=True,
+            )
 
         return [await self._build_official_detail_response(g) for g in matched]
 
