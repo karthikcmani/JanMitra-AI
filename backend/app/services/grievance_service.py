@@ -84,6 +84,16 @@ class GrievanceService:
                     detail=f"{val_result.reason} {val_result.suggestion or ''}".strip(),
                 )
 
+        # Populate verified citizen profile identity if self-filing
+        if getattr(draft_in, "filing_type", "self") == "self" and not getattr(draft_in, "petitioner_name", None):
+            from app.models.user_model import User
+            user_res = await self.repo.db.execute(select(User).where(User.id == citizen_id))
+            citizen_user = user_res.scalar_one_or_none()
+            if citizen_user:
+                draft_in.petitioner_name = citizen_user.full_name
+                draft_in.petitioner_phone = citizen_user.phone
+                draft_in.relationship = "Self (Primary Applicant)"
+
         grievance_no = self._generate_grievance_number()
         db_grievance = await self.repo.create_grievance(
             citizen_id=citizen_id,
@@ -563,17 +573,24 @@ class GrievanceService:
                 detail=f"{val_result.reason} {val_result.suggestion or ''}".strip(),
             )
 
+        from app.models.user_model import User
+        user_res = await self.repo.db.execute(select(User).where(User.id == citizen_id))
+        citizen_user = user_res.scalar_one_or_none()
+
         prev_status = grievance.status
         grievance.original_text = verified_text
         grievance.status = GrievanceStatus.INTAKE_RECEIVED
-        if petitioner_name:
-            grievance.petitioner_name = petitioner_name
-        if filing_type:
-            grievance.filing_type = filing_type
-        if relationship:
-            grievance.petitioner_relationship = relationship
-        if petitioner_phone:
-            grievance.petitioner_phone = petitioner_phone
+
+        effective_filing_type = filing_type or "self"
+        grievance.filing_type = effective_filing_type
+        if effective_filing_type == "self":
+            grievance.petitioner_name = petitioner_name or (citizen_user.full_name if citizen_user else "Registered Citizen")
+            grievance.petitioner_phone = petitioner_phone or (citizen_user.phone if citizen_user else None)
+            grievance.petitioner_relationship = "Self (Primary Applicant)"
+        else:
+            grievance.petitioner_name = petitioner_name or (citizen_user.full_name if citizen_user else "Represented Citizen")
+            grievance.petitioner_relationship = relationship or "Family Member / Locality Resident"
+            grievance.petitioner_phone = petitioner_phone or (citizen_user.phone if citizen_user else None)
 
         if attachment_id:
             att = await self.repo.get_attachment_for_grievance(grievance_id, attachment_id)

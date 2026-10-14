@@ -124,6 +124,7 @@ class GrievanceAttachmentResponse(BaseModel):
     mime_type: str
     storage_path: str
     file_size_bytes: Optional[int] = None
+    file_content_base64: Optional[str] = None
     raw_extracted_text: Optional[str] = None
     extraction_status: str = "pending"
     extraction_confidence: Optional[float] = None

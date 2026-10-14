@@ -9,6 +9,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:path_provider/path_provider.dart';
+import '../services/secure_storage_service.dart';
 import '../../models/grievance_model.dart';
 import '../../theme/app_theme.dart';
 
@@ -409,10 +410,12 @@ class _AudioPreviewContentState extends State<_AudioPreviewContent> {
         return;
       }
 
-      // Check 4: Download from server to local cache
+      // Check 4: Download from server to local cache with Bearer auth
+      final token = await SecureStorageService().getAccessToken();
       final dio = Dio(BaseOptions(
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 30),
+        connectTimeout: const Duration(seconds: 45),
+        receiveTimeout: const Duration(seconds: 45),
+        headers: token != null && token.isNotEmpty ? {'Authorization': 'Bearer $token'} : {},
       ));
 
       await dio.download(widget.fileUrl, cachedFile.path);
@@ -1015,10 +1018,12 @@ class _ImagePreviewContentState extends State<_ImagePreviewContent> {
         return;
       }
 
-      // Download image with Dio for resilience
+      // Download image with Dio for resilience with Bearer auth
+      final token = await SecureStorageService().getAccessToken();
       final dio = Dio(BaseOptions(
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 30),
+        connectTimeout: const Duration(seconds: 45),
+        receiveTimeout: const Duration(seconds: 45),
+        headers: token != null && token.isNotEmpty ? {'Authorization': 'Bearer $token'} : {},
       ));
       await dio.download(widget.fileUrl, cachedFile.path);
 

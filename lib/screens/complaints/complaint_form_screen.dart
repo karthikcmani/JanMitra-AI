@@ -476,13 +476,18 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
   void _detectPetitionerFromExtractedText(String text) {
     if (text.isEmpty) return;
     final regExp = RegExp(
-      r'(?:അപേക്ഷകൻ|അപേക്ഷക|പരാതിക്കാരൻ|പരാതിക്കാരി|Applicant|Petitioner|Complainant)[\s,:]+([^\n,]+)',
+      r'(?:അപേക്ഷകൻ|അപേക്ഷക|പരാതിക്കാരൻ|പരാതിക്കാരി|വിശ്വസ്തതയോടെ|ഇങ്ങനെക്ക്|ബോധിപ്പിക്കുന്നത്|അയക്കുന്ന\s*ആൾ|ഒപ്പ്|Applicant|Petitioner|Complainant|Signed\s*by|Submitted\s*by|From)[\s,:\n]+([^\n,]+)',
       caseSensitive: false,
     );
     final match = regExp.firstMatch(text);
     if (match != null) {
       String name = match.group(1)?.trim() ?? '';
-      name = name.replaceAll(RegExp(r'\[.*?\]'), '').trim();
+      name = name
+          .replaceAll(RegExp(r'\[.*?\]'), '')
+          .replaceAll(RegExp(r'[\(\)\{\}\*]'), '')
+          .replaceAll('Signature', '')
+          .replaceAll('ഒപ്പ്', '')
+          .trim();
       if (name.isNotEmpty && name.length >= 3 && name.length <= 60) {
         if (_detectedApplicantFromOcr != name) {
           setState(() {
@@ -618,13 +623,17 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
     );
     if (!shouldProceed || !mounted) return;
 
+    final authState = ref.read(authProvider);
+    final citizenName = authState.currentUser?.fullName;
+    final citizenPhone = authState.currentUser?.phone;
+
     final notifier = ref.read(grievanceIntakeProvider.notifier);
     notifier.updateVerifiedText(_verifiedTextController.text);
     await notifier.confirmVerification(
-      petitionerName: _filingType == 'on_behalf' ? _petitionerNameController.text.trim() : null,
+      petitionerName: _filingType == 'on_behalf' ? _petitionerNameController.text.trim() : citizenName,
       filingType: _filingType,
-      relationship: _filingType == 'on_behalf' ? _relationship : null,
-      petitionerPhone: _filingType == 'on_behalf' ? _petitionerPhoneController.text.trim() : null,
+      relationship: _filingType == 'on_behalf' ? _relationship : 'Self (Primary Applicant)',
+      petitionerPhone: _filingType == 'on_behalf' ? _petitionerPhoneController.text.trim() : citizenPhone,
     );
 
     final state = ref.read(grievanceIntakeProvider);
@@ -669,14 +678,18 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
     );
     if (!shouldProceed || !mounted) return;
 
+    final authState = ref.read(authProvider);
+    final citizenName = authState.currentUser?.fullName;
+    final citizenPhone = authState.currentUser?.phone;
+
     final notifier = ref.read(grievanceIntakeProvider.notifier);
     final grievance = await notifier.submitDirectText(
       title: _directTitleController.text.trim(),
       text: _directTextController.text.trim(),
-      petitionerName: _filingType == 'on_behalf' ? _petitionerNameController.text.trim() : null,
+      petitionerName: _filingType == 'on_behalf' ? _petitionerNameController.text.trim() : citizenName,
       filingType: _filingType,
-      relationship: _filingType == 'on_behalf' ? _relationship : null,
-      petitionerPhone: _filingType == 'on_behalf' ? _petitionerPhoneController.text.trim() : null,
+      relationship: _filingType == 'on_behalf' ? _relationship : 'Self (Primary Applicant)',
+      petitionerPhone: _filingType == 'on_behalf' ? _petitionerPhoneController.text.trim() : citizenPhone,
     );
 
     if (grievance != null && mounted) {
@@ -1847,6 +1860,96 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
             style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
           ),
           const SizedBox(height: 12),
+
+          if (_detectedApplicantFromOcr != null &&
+              _detectedApplicantFromOcr!.trim().isNotEmpty &&
+              !citizenName.toLowerCase().contains(_detectedApplicantFromOcr!.trim().toLowerCase())) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF7C3AED).withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.info_outline, size: 18, color: Color(0xFF7C3AED)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Document mentions applicant: "$_detectedApplicantFromOcr"',
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF7C3AED)),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Your verified profile is "$citizenName". Are you filing this petition on behalf of $_detectedApplicantFromOcr or for yourself?',
+                    style: const TextStyle(fontSize: 12, color: Colors.black87),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            side: BorderSide(
+                              color: _filingType == 'on_behalf' ? const Color(0xFF7C3AED) : Colors.grey.shade400,
+                              width: _filingType == 'on_behalf' ? 2 : 1,
+                            ),
+                            backgroundColor: _filingType == 'on_behalf'
+                                ? const Color(0xFF7C3AED).withValues(alpha: 0.1)
+                                : Colors.transparent,
+                          ),
+                          icon: const Icon(Icons.people_outline, size: 16, color: Color(0xFF7C3AED)),
+                          label: Text(
+                            'On Behalf: $_detectedApplicantFromOcr',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF7C3AED)),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _filingType = 'on_behalf';
+                              _petitionerNameController.text = _detectedApplicantFromOcr!;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          side: BorderSide(
+                            color: _filingType == 'self' ? AppTheme.success : Colors.grey.shade400,
+                            width: _filingType == 'self' ? 2 : 1,
+                          ),
+                          backgroundColor: _filingType == 'self'
+                              ? AppTheme.success.withValues(alpha: 0.1)
+                              : Colors.transparent,
+                        ),
+                        icon: const Icon(Icons.person, size: 16, color: AppTheme.success),
+                        label: const Text(
+                          'For Myself',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.success),
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _filingType = 'self';
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
 
           Row(
             children: [

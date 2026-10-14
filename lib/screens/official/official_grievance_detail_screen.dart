@@ -305,12 +305,107 @@ class _OfficialGrievanceDetailScreenState extends ConsumerState<OfficialGrievanc
               ],
             ),
             const Divider(height: 20),
-            Row(
-              children: [
-                Expanded(child: Text('Citizen Name: ${g.citizenName ?? "Anonymous / Registered Citizen"}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
-                if (g.citizenPhone != null)
-                  Text('Phone: ${g.citizenPhone}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-              ],
+            // Petitioner & Complainant Verification Card
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: g.filingType == 'on_behalf'
+                    ? const Color(0xFF7C3AED).withValues(alpha: 0.06)
+                    : AppTheme.success.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: g.filingType == 'on_behalf'
+                      ? const Color(0xFF7C3AED).withValues(alpha: 0.3)
+                      : AppTheme.success.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        g.filingType == 'on_behalf' ? Icons.people_outline_rounded : Icons.verified_user_rounded,
+                        color: g.filingType == 'on_behalf' ? const Color(0xFF7C3AED) : AppTheme.success,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        g.filingType == 'on_behalf' ? 'Representative Petition (On Behalf)' : 'Verified Citizen Complainant',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: g.filingType == 'on_behalf' ? const Color(0xFF7C3AED) : AppTheme.success,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (g.filingType == 'on_behalf') ...[
+                    Row(
+                      children: [
+                        const Text('Actual Complainant: ', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                        Expanded(
+                          child: Text(
+                            g.petitionerName ?? 'Named Resident',
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black87),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Text('Representation Role: ', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                        Text(
+                          g.relationship ?? 'Authorized Representative',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF7C3AED)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Text('Filing User (Proxy): ', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                        Expanded(
+                          child: Text(
+                            '${g.citizenName ?? "Registered Citizen"}${g.citizenPhone != null ? " (Ph: ${g.citizenPhone})" : ""}',
+                            style: const TextStyle(fontSize: 12, color: Colors.black87),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ] else ...[
+                    Row(
+                      children: [
+                        const Text('Complainant: ', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                        Expanded(
+                          child: Text(
+                            g.petitionerName ?? g.citizenName ?? 'Registered Citizen',
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black87),
+                          ),
+                        ),
+                        if (g.petitionerPhone != null || g.citizenPhone != null)
+                          Text(
+                            'Ph: ${g.petitionerPhone ?? g.citizenPhone}',
+                            style: const TextStyle(fontSize: 12, color: Colors.black54),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Row(
+                      children: [
+                        Icon(Icons.check_circle_outline, size: 14, color: AppTheme.success),
+                        SizedBox(width: 4),
+                        Text(
+                          'Identity verified via registered citizen profile',
+                          style: TextStyle(fontSize: 11, color: AppTheme.success, fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
             ),
             const SizedBox(height: 10),
             const Text('Verified Petition Content:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87)),
