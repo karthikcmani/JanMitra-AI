@@ -448,20 +448,54 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
     if (state.extractionStep == IntakeExtractionStep.completed &&
         state.rawExtractedText != null &&
         state.rawExtractedText!.trim().isNotEmpty) {
-      _verifiedTextController.text = state.rawExtractedText!;
-      _detectPetitionerFromExtractedText(state.rawExtractedText!);
+      final extracted = state.rawExtractedText!;
+      final val = GrievanceValidator.validateGrievanceText(extracted);
 
-      final val = GrievanceValidator.validateGrievanceText(state.rawExtractedText!);
-      if (val.isChitChat && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              '⚠️ Casual greeting/chit-chat detected. Please edit or re-record to describe a specific civic problem.',
+      if (val.isUnreadable) {
+        // Do NOT populate verification text with [Unreadable]
+        _verifiedTextController.clear();
+        _detectedApplicantFromOcr = null;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(
+                children: [
+                  Icon(Icons.broken_image_outlined, color: Colors.white, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '⚠️ Document unreadable or not a valid petition. Please retake photo with clear lighting.',
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: AppTheme.danger,
+              duration: const Duration(seconds: 6),
+              action: SnackBarAction(
+                label: 'Retake',
+                textColor: Colors.white,
+                onPressed: () {
+                  _openLiveCameraViewfinder();
+                },
+              ),
             ),
-            backgroundColor: AppTheme.warning,
-            duration: Duration(seconds: 5),
-          ),
-        );
+          );
+        }
+      } else {
+        _verifiedTextController.text = extracted;
+        _detectPetitionerFromExtractedText(extracted);
+
+        if (val.isChitChat && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                '⚠️ Casual greeting/chit-chat detected. Please edit or re-record to describe a specific civic problem.',
+              ),
+              backgroundColor: AppTheme.warning,
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
       }
     } else if (state.errorMessage != null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -489,14 +523,21 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
           .replaceAll('ഒപ്പ്', '')
           .trim();
       if (name.isNotEmpty && name.length >= 3 && name.length <= 60) {
-        if (_detectedApplicantFromOcr != name) {
-          setState(() {
-            _detectedApplicantFromOcr = name;
-            if (_petitionerNameController.text.trim().isEmpty) {
-              _petitionerNameController.text = name;
-            }
-          });
-        }
+        final authState = ref.read(authProvider);
+        final citizenName = authState.currentUser?.fullName ?? '';
+        final isDifferent = citizenName.isNotEmpty &&
+            !citizenName.toLowerCase().contains(name.toLowerCase()) &&
+            !name.toLowerCase().contains(citizenName.toLowerCase());
+
+        setState(() {
+          _detectedApplicantFromOcr = name;
+          if (isDifferent) {
+            _filingType = 'on_behalf';
+            _petitionerNameController.text = name;
+          } else {
+            _filingType = 'self';
+          }
+        });
       }
     }
   }
@@ -783,14 +824,32 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
     final val = GrievanceValidator.validateGrievanceText(text);
     if (val.isValid) return const SizedBox.shrink();
 
+    final Color bannerBg = val.isUnreadable
+        ? Colors.red.shade50
+        : (val.isChitChat ? Colors.amber.shade50 : Colors.red.shade50);
+    final Color bannerBorder = val.isUnreadable
+        ? Colors.red.shade300
+        : (val.isChitChat ? Colors.amber.shade400 : Colors.red.shade300);
+    final Color bannerColor = val.isUnreadable
+        ? AppTheme.danger
+        : (val.isChitChat ? Colors.amber.shade900 : AppTheme.danger);
+    final IconData bannerIcon = val.isUnreadable
+        ? Icons.broken_image_outlined
+        : (val.isChitChat ? Icons.warning_amber_rounded : Icons.info_outline_rounded);
+    final String bannerTitle = val.isUnreadable
+        ? 'Unreadable / Non-Grievance Document Detected'
+        : (val.isChitChat
+            ? 'Non-Civic Content Detected (Casual Greeting / Chit-chat)'
+            : 'Petition Content Needs Clarification');
+
     return Container(
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: val.isChitChat ? Colors.amber.shade50 : Colors.red.shade50,
+        color: bannerBg,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: val.isChitChat ? Colors.amber.shade400 : Colors.red.shade300,
+          color: bannerBorder,
           width: 1.2,
         ),
       ),
@@ -798,8 +857,8 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
-            val.isChitChat ? Icons.warning_amber_rounded : Icons.info_outline_rounded,
-            color: val.isChitChat ? Colors.amber.shade900 : AppTheme.danger,
+            bannerIcon,
+            color: bannerColor,
             size: 22,
           ),
           const SizedBox(width: 10),
@@ -808,12 +867,10 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  val.isChitChat
-                      ? 'Non-Civic Content Detected (Casual Greeting / Chit-chat)'
-                      : 'Petition Content Needs Clarification',
+                  bannerTitle,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: val.isChitChat ? Colors.amber.shade900 : AppTheme.danger,
+                    color: bannerColor,
                     fontSize: 13,
                   ),
                 ),
@@ -1277,7 +1334,71 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
         // Extraction Completed Display & Verification Area
         if (state.extractionStep == IntakeExtractionStep.completed) ...[
           const SizedBox(height: 16),
-          if (state.rawExtractedText != null && state.rawExtractedText!.isNotEmpty) ...[
+          if (state.rawExtractedText != null &&
+              GrievanceValidator.validateGrievanceText(state.rawExtractedText!).isUnreadable) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.red.shade300, width: 1.5),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.broken_image_rounded, color: AppTheme.danger, size: 24),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'Unreadable / Non-Petition Document Detected',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.danger),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'The captured image could not be recognized as a valid written grievance petition (e.g. keyboard photo, blurry capture, or blank paper). Please capture a clearer, well-lit photo of the petition document or enter your grievance manually below.',
+                    style: TextStyle(fontSize: 12, height: 1.4, color: Colors.black87),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            _openLiveCameraViewfinder();
+                          },
+                          icon: const Icon(Icons.camera_alt_rounded, size: 18),
+                          label: const Text('Retake Photo', style: TextStyle(fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryBlue,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            _pickDocument();
+                          },
+                          icon: const Icon(Icons.photo_library_outlined, size: 18),
+                          label: const Text('Pick Image', style: TextStyle(fontWeight: FontWeight.bold)),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ] else if (state.rawExtractedText != null && state.rawExtractedText!.isNotEmpty) ...[
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -1955,7 +2076,13 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
             children: [
               Expanded(
                 child: ChoiceChip(
-                  label: const Text('Filing for Myself (സ്വന്തം)'),
+                  label: const Center(
+                    child: Text(
+                      'Myself (സ്വന്തം)',
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
                   selected: _filingType == 'self',
                   onSelected: (selected) {
                     if (selected) setState(() => _filingType = 'self');
@@ -1965,7 +2092,13 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: ChoiceChip(
-                  label: const Text('On Behalf / Other (മറ്റൊരാൾക്ക്)'),
+                  label: const Center(
+                    child: Text(
+                      'On Behalf (മറ്റൊരാൾക്ക്)',
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
                   selected: _filingType == 'on_behalf',
                   onSelected: (selected) {
                     if (selected) setState(() => _filingType = 'on_behalf');
@@ -2035,16 +2168,46 @@ class _ComplaintFormScreenState extends ConsumerState<ComplaintFormScreen> {
             DropdownButtonFormField<String>(
               key: ValueKey('rel_$_relationship'),
               initialValue: _relationship,
+              isExpanded: true,
               decoration: const InputDecoration(
                 labelText: 'Relationship / Representation Role',
                 border: OutlineInputBorder(),
                 isDense: true,
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
               items: const [
-                DropdownMenuItem(value: 'Family Member', child: Text('Family Member / Relative (കുടുംബാംഗം)')),
-                DropdownMenuItem(value: 'Neighbor / Locality', child: Text('Neighbor / Locality Resident (അയൽവാസി)')),
-                DropdownMenuItem(value: 'Authorized Representative', child: Text('Authorized Representative (പ്രതിനിധി)')),
-                DropdownMenuItem(value: 'Community / Public Interest', child: Text('Public Interest / Community (പൊതുജന താല്പര്യം)')),
+                DropdownMenuItem(
+                  value: 'Family Member',
+                  child: Text(
+                    'Family Member / Relative (കുടുംബാംഗം)',
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'Neighbor / Locality',
+                  child: Text(
+                    'Neighbor / Locality Resident (അയൽവാസി)',
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'Authorized Representative',
+                  child: Text(
+                    'Authorized Representative (പ്രതിനിധി)',
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'Community / Public Interest',
+                  child: Text(
+                    'Public Interest / Community (പൊതുജന താല്പര്യം)',
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ),
               ],
               onChanged: (val) {
                 if (val != null) setState(() => _relationship = val);

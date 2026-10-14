@@ -2,6 +2,7 @@ class GrievanceValidationResult {
   final bool isValid;
   final bool isChitChat;
   final bool isTooShort;
+  final bool isUnreadable;
   final String? reason;
   final String? suggestion;
 
@@ -9,6 +10,7 @@ class GrievanceValidationResult {
     required this.isValid,
     required this.isChitChat,
     required this.isTooShort,
+    this.isUnreadable = false,
     this.reason,
     this.suggestion,
   });
@@ -60,6 +62,16 @@ class GrievanceValidator {
     RegExp(r'\b(test|testing|sample|demo)\b', caseSensitive: false),
   ];
 
+  static final List<RegExp> _unreadableRegexes = [
+    RegExp(r'\[\s*unreadable\s*\]', caseSensitive: false),
+    RegExp(r'\bunreadable\b', caseSensitive: false),
+    RegExp(r'\bcannot\s*read\b', caseSensitive: false),
+    RegExp(r'\bblurry\b', caseSensitive: false),
+    RegExp(r'\bno\s*text\s*(found|visible)\b', caseSensitive: false),
+    RegExp(r'\bunable\s*to\s*transcribe\b', caseSensitive: false),
+    RegExp(r'\bnot\s*readable\b', caseSensitive: false),
+  ];
+
   static GrievanceValidationResult validateGrievanceText(String? text) {
     if (text == null || text.trim().isEmpty) {
       return const GrievanceValidationResult(
@@ -87,6 +99,26 @@ class GrievanceValidator {
 
     // Check if any civic issue keyword is present
     final hasCivicIssue = _civicKeywords.any((k) => textLower.contains(k.toLowerCase()));
+
+    // Check for unreadable / non-document OCR output
+    final coreBody = cleanText.split(RegExp(r'---\s*EXTRACTED KEYWORDS', caseSensitive: false)).first.trim();
+    final cleanedCore = coreBody
+        .replaceAll(RegExp(r'\[\s*unreadable\s*\]|\bunreadable\b|\bblurry\b|\bcannot\s*read\b', caseSensitive: false), '')
+        .replaceAll(RegExp(r'[\s\W_]+', unicode: true), '');
+
+    final bool hasUnreadableSignal = _unreadableRegexes.any((r) => r.hasMatch(textLower));
+    final bool hasUnreadableTitle = RegExp(r'Subject Title:\s*\[?Unreadable\]?', caseSensitive: false).hasMatch(cleanText);
+
+    if ((hasUnreadableSignal && !hasCivicIssue) || (hasUnreadableTitle && cleanedCore.length < 20)) {
+      return const GrievanceValidationResult(
+        isValid: false,
+        isChitChat: false,
+        isTooShort: false,
+        isUnreadable: true,
+        reason: 'The captured document image could not be read or does not contain a recognizable grievance petition.',
+        suggestion: 'Please take a clear, well-lit photo of the physical petition or handwritten complaint.',
+      );
+    }
 
     // Count how many chitchat signals match
     final hasChitChat = _chitchatRegexes.any((r) => r.hasMatch(textLower));

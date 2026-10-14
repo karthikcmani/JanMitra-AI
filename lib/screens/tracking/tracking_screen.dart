@@ -1283,16 +1283,20 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            log.actionType.replaceAll('_', ' ').toUpperCase(),
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                              color: AppTheme.primaryBlue,
+                          Expanded(
+                            child: Text(
+                              log.actionType.replaceAll('_', ' ').toUpperCase(),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.primaryBlue,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
                           ),
+                          const SizedBox(width: 8),
                           Text(
                             _formatDate(log.createdAt),
                             style: const TextStyle(

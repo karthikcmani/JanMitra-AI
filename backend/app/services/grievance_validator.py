@@ -5,6 +5,7 @@ class GrievanceValidationResult(NamedTuple):
     is_valid: bool
     is_chitchat: bool
     is_too_short: bool
+    is_unreadable: bool = False
     reason: Optional[str] = None
     suggestion: Optional[str] = None
 
@@ -56,9 +57,22 @@ CHITCHAT_PATTERNS = [
 
 COMPILED_CHITCHAT = [re.compile(p, re.IGNORECASE) for p in CHITCHAT_PATTERNS]
 
+UNREADABLE_PATTERNS = [
+    r"\[\s*unreadable\s*\]",
+    r"\bunreadable\b",
+    r"\bcannot\s*read\b",
+    r"\bblurry\b",
+    r"\bno\s*text\s*found\b",
+    r"\bno\s*text\s*visible\b",
+    r"\bunable\s*to\s*transcribe\b",
+    r"\bnot\s*readable\b",
+]
+
+COMPILED_UNREADABLE = [re.compile(p, re.IGNORECASE) for p in UNREADABLE_PATTERNS]
+
 
 def validate_grievance_text(text: Optional[str]) -> GrievanceValidationResult:
-    """Validates whether petition text contains a genuine civic grievance or is casual small-talk/gibberish."""
+    """Validates whether petition text contains a genuine civic grievance or is casual small-talk/unreadable/gibberish."""
     if not text or not text.strip():
         return GrievanceValidationResult(
             is_valid=False,
@@ -84,6 +98,24 @@ def validate_grievance_text(text: Optional[str]) -> GrievanceValidationResult:
 
     # Check for civic issue presence
     has_civic_issue = any(k in text_lower for k in CIVIC_KEYWORDS)
+
+    # Check for unreadable / non-document OCR output
+    core_body = re.split(r"---\s*EXTRACTED KEYWORDS", clean_text, flags=re.IGNORECASE)[0].strip()
+    cleaned_core = re.sub(r"\[\s*unreadable\s*\]|\bunreadable\b|\bblurry\b|\bcannot\s*read\b", "", core_body, flags=re.IGNORECASE)
+    cleaned_core = re.sub(r"[\s\W_]+", "", cleaned_core)
+
+    has_unreadable_signal = any(p.search(clean_text) for p in COMPILED_UNREADABLE)
+    has_unreadable_title = bool(re.search(r"Subject Title:\s*\[?Unreadable\]?", clean_text, re.IGNORECASE))
+
+    if (has_unreadable_signal and not has_civic_issue) or (has_unreadable_title and len(cleaned_core) < 20):
+        return GrievanceValidationResult(
+            is_valid=False,
+            is_chitchat=False,
+            is_too_short=False,
+            is_unreadable=True,
+            reason="The captured document image could not be read or does not contain a recognizable grievance petition.",
+            suggestion="Please take a clear, well-lit photo of the physical petition or handwritten complaint.",
+        )
 
     # Count how many chitchat signals match
     matched_chitchat = [p.pattern for p in COMPILED_CHITCHAT if p.search(text_lower)]

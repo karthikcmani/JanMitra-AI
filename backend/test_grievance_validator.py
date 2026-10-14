@@ -36,3 +36,26 @@ def test_valid_grievance_acceptance():
     road_text = "There are severe potholes on the main road in Ward 4 causing accidents. Please repair."
     res_road = validate_grievance_text(road_text)
     assert res_road.is_valid
+
+def test_unreadable_document_rejection():
+    # User's keyboard capture screenshot OCR text
+    keyboard_ocr_text = (
+        "[Unreadable]\n\n"
+        "--- EXTRACTED KEYWORDS & SUMMARY ---\n"
+        "Subject Title: [Unreadable]\n"
+        "Main Problem Keywords: [Unreadable]"
+    )
+    res_kb = validate_grievance_text(keyboard_ocr_text)
+    assert not res_kb.is_valid
+    assert res_kb.is_unreadable
+
+    # Single [Unreadable]
+    res_single = validate_grievance_text("[Unreadable]")
+    assert not res_single.is_valid
+    assert res_single.is_unreadable
+
+    # Blurry unreadable note
+    res_blur = validate_grievance_text("blurry image unreadable document text")
+    assert not res_blur.is_valid
+    assert res_blur.is_unreadable
+
