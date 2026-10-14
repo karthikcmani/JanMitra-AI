@@ -1454,10 +1454,16 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
           ...grievance.attachments.map((att) {
             final isCompleted = att.extractionStatus == 'completed';
             final isExpanded = _expandedAttachments.contains(att.id);
-            final rawText = att.rawExtractedText ?? '';
-            final isLong = rawText.length > 200;
             final kind = getAttachmentKind(att.originalFilename, att.mimeType);
             final isAudio = kind == AttachmentKind.audio;
+            final rawText = (att.rawExtractedText != null && att.rawExtractedText!.trim().isNotEmpty)
+                ? att.rawExtractedText!.trim()
+                : (isAudio && grievance.originalText != null && grievance.originalText!.trim().isNotEmpty
+                    ? grievance.originalText!.trim()
+                    : (isAudio && grievance.description != null && grievance.description!.trim().isNotEmpty
+                        ? grievance.description!.trim()
+                        : ''));
+            final isLong = rawText.length > 200;
 
             return Container(
               margin: const EdgeInsets.only(bottom: 10),
@@ -1597,7 +1603,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                           ),
                           onPressed: () => _showAttachmentPreview(context, grievance.id, att),
                         ),
-                        if (att.rawExtractedText != null && att.rawExtractedText!.isNotEmpty)
+                        if (rawText.isNotEmpty)
                           OutlinedButton.icon(
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -1616,7 +1622,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                               _speakingAttachmentId == att.id ? 'Stop Speech' : 'Speak Petition (TTS)',
                               style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                             ),
-                            onPressed: () => _toggleSpeakTranscript(att.id, att.rawExtractedText!),
+                            onPressed: () => _toggleSpeakTranscript(att.id, rawText),
                           ),
                       ],
                     )

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 
 import '../../models/grievance_model.dart';
 import '../../providers/theme_provider.dart';
@@ -25,6 +27,8 @@ class _OfficialGrievanceDetailScreenState extends ConsumerState<OfficialGrievanc
   final _remarksController = TextEditingController();
   final _questionController = TextEditingController();
 
+  FlutterTts? _flutterTts;
+  String? _speakingAttachmentId;
   String _selectedDept = 'Kerala Water Authority (KWA)';
   String _selectedStatus = 'forwarded';
   bool _isSubmitting = false;
@@ -40,9 +44,51 @@ class _OfficialGrievanceDetailScreenState extends ConsumerState<OfficialGrievanc
 
   @override
   void dispose() {
+    _flutterTts?.stop();
     _remarksController.dispose();
     _questionController.dispose();
     super.dispose();
+  }
+
+  Future<void> _toggleSpeakTranscript(String attachmentId, String text) async {
+    if (_speakingAttachmentId == attachmentId) {
+      await _flutterTts?.stop();
+      if (mounted) {
+        setState(() {
+          _speakingAttachmentId = null;
+        });
+      }
+      return;
+    }
+
+    _flutterTts ??= FlutterTts();
+    await _flutterTts!.setLanguage('ml-IN');
+    await _flutterTts!.setSpeechRate(0.48);
+    await _flutterTts!.setVolume(1.0);
+    await _flutterTts!.setPitch(1.0);
+
+    _flutterTts!.setCompletionHandler(() {
+      if (mounted) {
+        setState(() {
+          _speakingAttachmentId = null;
+        });
+      }
+    });
+
+    _flutterTts!.setErrorHandler((msg) {
+      if (mounted) {
+        setState(() {
+          _speakingAttachmentId = null;
+        });
+      }
+    });
+
+    if (mounted) {
+      setState(() {
+        _speakingAttachmentId = attachmentId;
+      });
+    }
+    await _flutterTts!.speak(text);
   }
 
   void _initFormFields(GrievanceModel g) {
@@ -316,6 +362,13 @@ class _OfficialGrievanceDetailScreenState extends ConsumerState<OfficialGrievanc
                   final isCompleted = att.extractionStatus == 'completed';
                   final kind = getAttachmentKind(att.originalFilename, att.mimeType);
                   final isAudio = kind == AttachmentKind.audio;
+                  final effectiveText = (att.rawExtractedText != null && att.rawExtractedText!.trim().isNotEmpty)
+                      ? att.rawExtractedText!.trim()
+                      : (isAudio && g.originalText != null && g.originalText!.trim().isNotEmpty
+                          ? g.originalText!.trim()
+                          : (isAudio && g.description != null && g.description!.trim().isNotEmpty
+                              ? g.description!.trim()
+                              : ''));
 
                   return Container(
                     margin: const EdgeInsets.only(bottom: 10),
@@ -371,38 +424,132 @@ class _OfficialGrievanceDetailScreenState extends ConsumerState<OfficialGrievanc
                             ),
                           ],
                         ),
-                        if (att.rawExtractedText != null && att.rawExtractedText!.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            isAudio ? 'Extracted Voice Transcript:' : 'Extracted OCR Text:',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            att.rawExtractedText!,
-                            style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.black87),
+                        if (effectiveText.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: isAudio
+                                  ? const Color(0xFF7C3AED).withValues(alpha: 0.06)
+                                  : Colors.blue.withValues(alpha: 0.05),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: isAudio
+                                    ? const Color(0xFF7C3AED).withValues(alpha: 0.2)
+                                    : Colors.blue.withValues(alpha: 0.15),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      isAudio ? Icons.record_voice_over_rounded : Icons.document_scanner_outlined,
+                                      size: 14,
+                                      color: isAudio ? const Color(0xFF7C3AED) : AppTheme.primaryBlue,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        isAudio ? 'Extracted Voice Transcript:' : 'Extracted OCR Text:',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: isAudio ? const Color(0xFF7C3AED) : AppTheme.primaryBlue,
+                                        ),
+                                      ),
+                                    ),
+                                    InkWell(
+                                      onTap: () {
+                                        Clipboard.setData(ClipboardData(text: effectiveText));
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Transcript copied to clipboard!'),
+                                            duration: Duration(seconds: 2),
+                                          ),
+                                        );
+                                      },
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                        child: Text(
+                                          'Copy',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: isAudio ? const Color(0xFF7C3AED) : AppTheme.primaryBlue,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  effectiveText,
+                                  style: const TextStyle(fontSize: 12, height: 1.4, color: Colors.black87),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              visualDensity: VisualDensity.compact,
-                              foregroundColor: isAudio ? const Color(0xFF7C3AED) : null,
-                              side: isAudio ? const BorderSide(color: Color(0xFF7C3AED)) : null,
-                            ),
-                            icon: Icon(
-                              isAudio ? Icons.play_circle_outline_rounded : Icons.remove_red_eye_outlined,
-                              size: 16,
-                            ),
-                            label: Text(
-                              isAudio ? 'Listen to Voice Petition' : 'View Original Document',
-                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                            ),
-                            onPressed: () => _showAttachmentPreview(context, g.id, att),
-                          ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            if (isAudio) ...[
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  visualDensity: VisualDensity.compact,
+                                  backgroundColor: const Color(0xFF7C3AED),
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                                icon: const Icon(Icons.play_circle_filled_rounded, size: 18),
+                                label: const Text(
+                                  'Listen to Voice Petition',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
+                                onPressed: () => _showAttachmentPreview(context, g.id, att),
+                              ),
+                              if (effectiveText.isNotEmpty)
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    visualDensity: VisualDensity.compact,
+                                    foregroundColor: _speakingAttachmentId == att.id ? AppTheme.danger : const Color(0xFF7C3AED),
+                                    side: BorderSide(
+                                      color: _speakingAttachmentId == att.id ? AppTheme.danger : const Color(0xFF7C3AED),
+                                    ),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                  icon: Icon(
+                                    _speakingAttachmentId == att.id ? Icons.stop_circle_rounded : Icons.volume_up_rounded,
+                                    size: 16,
+                                  ),
+                                  label: Text(
+                                    _speakingAttachmentId == att.id ? 'Stop Speech' : 'Read Aloud (TTS)',
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                  ),
+                                  onPressed: () => _toggleSpeakTranscript(att.id, effectiveText),
+                                ),
+                            ] else ...[
+                              OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                icon: const Icon(Icons.remove_red_eye_outlined, size: 16),
+                                label: const Text(
+                                  'View Original Document',
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                                onPressed: () => _showAttachmentPreview(context, g.id, att),
+                              ),
+                            ],
+                          ],
                         ),
                       ],
                     ),

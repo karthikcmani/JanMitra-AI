@@ -351,7 +351,34 @@ class _AudioPreviewContentState extends State<_AudioPreviewContent> {
     try {
       final tempDir = await getTemporaryDirectory();
 
-      // Check 1: Check if file was recorded on this device directly with exact filename
+      // Check 1: Direct fileContentBase64 payload provided from backend database
+      if (widget.attachment.fileContentBase64 != null &&
+          widget.attachment.fileContentBase64!.trim().isNotEmpty) {
+        try {
+          final decoded = base64Decode(widget.attachment.fileContentBase64!.trim());
+          if (decoded.isNotEmpty) {
+            final ext = widget.attachment.originalFilename.isNotEmpty
+                ? widget.attachment.originalFilename.split('.').last.toLowerCase()
+                : 'm4a';
+            final b64AudioFile = File('${tempDir.path}/official_audio_${widget.attachment.id}.$ext');
+            await b64AudioFile.writeAsBytes(decoded, flush: true);
+            if (await b64AudioFile.exists() && await b64AudioFile.length() > 0) {
+              _localAudioPath = b64AudioFile.path;
+              await _player.setSource(DeviceFileSource(_localAudioPath!));
+              if (mounted) {
+                setState(() {
+                  _isLoading = false;
+                });
+              }
+              return;
+            }
+          }
+        } catch (b64Err) {
+          debugPrint('[AudioPreview] Base64 decode audio error: $b64Err');
+        }
+      }
+
+      // Check 2: Check if file was recorded on this device directly with exact filename
       if (widget.attachment.originalFilename.isNotEmpty) {
         final directFile = File('${tempDir.path}/${widget.attachment.originalFilename}');
         if (await directFile.exists() && await directFile.length() > 0) {
@@ -365,34 +392,6 @@ class _AudioPreviewContentState extends State<_AudioPreviewContent> {
           return;
         }
       }
-
-      // Check 2: Fuzzy search for any live voice petition recording in tempDir
-      try {
-        final dirEntities = tempDir.listSync();
-        final voiceFiles = dirEntities
-            .whereType<File>()
-            .where((f) =>
-                f.path.contains('live_voice_petition') ||
-                f.path.endsWith('.m4a') ||
-                f.path.endsWith('.wav') ||
-                f.path.endsWith('.aac'))
-            .toList();
-        if (voiceFiles.isNotEmpty) {
-          voiceFiles.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
-          for (final candidate in voiceFiles) {
-            if (await candidate.length() > 0) {
-              _localAudioPath = candidate.path;
-              await _player.setSource(DeviceFileSource(_localAudioPath!));
-              if (mounted) {
-                setState(() {
-                  _isLoading = false;
-                });
-              }
-              return;
-            }
-          }
-        }
-      } catch (_) {}
 
       // Check 3: Check cached copy
       final safeName = widget.attachment.originalFilename.isNotEmpty
@@ -964,7 +963,33 @@ class _ImagePreviewContentState extends State<_ImagePreviewContent> {
     try {
       final tempDir = await getTemporaryDirectory();
 
-      // Check if image was recently captured on this device directly
+      // Check 1: Base64 direct payload from backend database
+      if (widget.attachment.fileContentBase64 != null &&
+          widget.attachment.fileContentBase64!.trim().isNotEmpty) {
+        try {
+          final decoded = base64Decode(widget.attachment.fileContentBase64!.trim());
+          if (decoded.isNotEmpty) {
+            final ext = widget.attachment.originalFilename.isNotEmpty
+                ? widget.attachment.originalFilename.split('.').last.toLowerCase()
+                : 'jpg';
+            final b64ImgFile = File('${tempDir.path}/official_img_${widget.attachment.id}.$ext');
+            await b64ImgFile.writeAsBytes(decoded, flush: true);
+            if (await b64ImgFile.exists() && await b64ImgFile.length() > 0) {
+              if (mounted) {
+                setState(() {
+                  _localFile = b64ImgFile;
+                  _isLoading = false;
+                });
+              }
+              return;
+            }
+          }
+        } catch (b64Err) {
+          debugPrint('[ImagePreview] Base64 decode image error: $b64Err');
+        }
+      }
+
+      // Check 2: Check if image was recently captured on this device directly
       final directFile = File('${tempDir.path}/${widget.attachment.originalFilename}');
       if (await directFile.exists() && await directFile.length() > 0) {
         if (mounted) {

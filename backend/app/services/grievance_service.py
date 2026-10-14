@@ -349,7 +349,10 @@ class GrievanceService:
                     else:
                         f.write(b"")
 
-        return abs_path, attachment.mime_type, attachment.original_filename
+        ret_mime = attachment.mime_type
+        if not getattr(attachment, "file_content_base64", None) and (attachment.mime_type.startswith("audio/") or attachment.original_filename.lower().endswith((".m4a", ".wav", ".mp3", ".aac", ".ogg"))):
+            ret_mime = "audio/wav"
+        return abs_path, ret_mime, attachment.original_filename
 
     async def sync_attachment_base64(
         self, grievance_id: str, attachment_id: str, file_content_base64: str

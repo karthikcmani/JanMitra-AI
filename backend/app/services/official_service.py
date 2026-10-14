@@ -380,10 +380,18 @@ class OfficialService:
             attachments=[
                 {
                     "id": a.id,
-                    "filename": a.original_filename,
-                    "mime_type": a.mime_type,
+                    "grievance_id": getattr(a, "grievance_id", g.id),
+                    "attachment_type": getattr(a, "attachment_type", "voice_recording" if (a.original_filename or "").lower().endswith((".m4a", ".wav", ".mp3", ".aac", ".ogg")) else "handwritten_petition"),
+                    "filename": a.original_filename or ("live_voice_petition.m4a" if (a.mime_type or "").startswith("audio/") else "evidence_document.jpg"),
+                    "original_filename": a.original_filename or ("live_voice_petition.m4a" if (a.mime_type or "").startswith("audio/") else "evidence_document.jpg"),
+                    "mime_type": a.mime_type or ("audio/mp4" if (a.original_filename or "").lower().endswith(".m4a") else "application/octet-stream"),
+                    "storage_path": getattr(a, "storage_path", ""),
+                    "file_size_bytes": getattr(a, "file_size_bytes", None),
+                    "file_content_base64": getattr(a, "file_content_base64", None),
                     "raw_ocr_text": a.raw_extracted_text,
+                    "raw_extracted_text": a.raw_extracted_text,
                     "extraction_status": a.extraction_status,
+                    "created_at": a.created_at.isoformat() if hasattr(a.created_at, "isoformat") else str(a.created_at or ""),
                 }
                 for a in attachments
             ],

@@ -498,6 +498,7 @@ class GrievanceAttachmentModel {
   final String mimeType;
   final String storagePath;
   final int? fileSizeBytes;
+  final String? fileContentBase64;
   final String? rawExtractedText;
   final String extractionStatus;
   final double? extractionConfidence;
@@ -514,6 +515,7 @@ class GrievanceAttachmentModel {
     required this.mimeType,
     required this.storagePath,
     this.fileSizeBytes,
+    this.fileContentBase64,
     this.rawExtractedText,
     required this.extractionStatus,
     this.extractionConfidence,
@@ -528,11 +530,12 @@ class GrievanceAttachmentModel {
       id: (json['id'] ?? '').toString(),
       grievanceId: (json['grievance_id'] ?? '').toString(),
       attachmentType: (json['attachment_type'] ?? '').toString(),
-      originalFilename: (json['original_filename'] ?? '').toString(),
+      originalFilename: (json['original_filename'] ?? json['filename'] ?? '').toString(),
       mimeType: (json['mime_type'] ?? '').toString(),
       storagePath: (json['storage_path'] ?? '').toString(),
       fileSizeBytes: (json['file_size_bytes'] as num?)?.toInt(),
-      rawExtractedText: json['raw_extracted_text']?.toString(),
+      fileContentBase64: json['file_content_base64']?.toString(),
+      rawExtractedText: json['raw_extracted_text']?.toString() ?? json['raw_ocr_text']?.toString(),
       extractionStatus: (json['extraction_status'] ?? 'pending').toString(),
       extractionConfidence: (json['extraction_confidence'] as num?)?.toDouble(),
       extractionEngine: json['extraction_engine']?.toString(),
