@@ -59,6 +59,7 @@ class PriorityIntelligenceEngine:
         # English
         "deep pothole", "potholes", "accident prone", "sewage overflow", "transformer fault",
         "drainage block", "road damage", "water stagnation", "dengue", "disease outbreak",
+        "broken water pipe", "broken pipe", "water pipe leak", "pipe leakage", "pipe break",
         # Malayalam
         "വലിയ കുഴികൾ", "അപകടങ്ങൾ", "മലിനജലം", "ഡെങ്കിപ്പനി", "പകർച്ചവ്യാധി", "റോഡ് പൊട്ടിപ്പൊളിഞ്ഞു",
         "ഡ്രെയിനേജ്", "മഴവെള്ളം", "കാൽനടയാത്രക്കാർ"

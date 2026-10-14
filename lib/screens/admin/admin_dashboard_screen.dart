@@ -764,9 +764,52 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               workloadAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, s) => Text('Workload error: $e', style: const TextStyle(color: AppTheme.danger)),
-                data: (workloads) => Column(
-                  children: workloads.map((w) => _buildWorkloadCard(w)).toList(),
-                ),
+                data: (workloads) {
+                  final totalCount = workloads.fold<int>(0, (sum, w) => sum + (w.total as int? ?? 0));
+                  final totalPending = workloads.fold<int>(0, (sum, w) => sum + (w.pending as int? ?? 0));
+                  final totalProcessing = workloads.fold<int>(0, (sum, w) => sum + (w.underProcessing as int? ?? 0));
+                  final totalResolved = workloads.fold<int>(0, (sum, w) => sum + (w.resolved as int? ?? 0));
+
+                  return Column(
+                    children: [
+                      Card(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        color: AppTheme.primaryBlue.withValues(alpha: 0.08),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(color: AppTheme.primaryBlue.withValues(alpha: 0.3)),
+                        ),
+                        child: InkWell(
+                          onTap: () => _triggerSearch(dept: 'ALL'),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.account_balance_rounded, color: AppTheme.primaryBlue),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text('Statewide Aggregate (All Departments)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.primaryBlue)),
+                                      Text(
+                                        'Total: $totalCount | Pending: $totalPending | Processing: $totalProcessing | Resolved: $totalResolved',
+                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.black87),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(Icons.filter_alt_outlined, color: AppTheme.primaryBlue, size: 20),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      ...workloads.map((w) => _buildWorkloadCard(w)),
+                    ],
+                  );
+                },
               ),
 
               const SizedBox(height: 24),

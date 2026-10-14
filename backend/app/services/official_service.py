@@ -520,8 +520,11 @@ class OfficialService:
         prev_status = grievance.status
         grievance.category = category_name
         grievance.department_id = dept_name
-        grievance.priority = p_eval.priority.lower()
-        grievance.priority_score = p_eval.priority_score
+        if grievance.priority in ("high", "critical") and p_eval.priority.lower() not in ("high", "critical"):
+            grievance.priority_score = max(grievance.priority_score or 75, 75)
+        else:
+            grievance.priority = p_eval.priority.lower()
+            grievance.priority_score = p_eval.priority_score
         grievance.status = GrievanceStatus.UNDER_ANALYSIS
         grievance.updated_at = datetime.now(timezone.utc)
 
@@ -757,7 +760,7 @@ class OfficialService:
                 elif g_prio != p_query:
                     continue
             if department_id:
-                effective_dept = (g.department_id or (g.analysis.predicted_category if g.analysis and g.analysis.predicted_category else "")).lower()
+                assigned_dept = self.classify_grievance_department(g)
                 dept_query = department_id.lower()
                 is_kwa = "kwa" in dept_query or "water" in dept_query
                 is_pwd = "pwd" in dept_query or "works" in dept_query or "road" in dept_query
@@ -765,12 +768,14 @@ class OfficialService:
                 is_lsgd = "lsgd" in dept_query or "panchayat" in dept_query or "municipality" in dept_query
                 is_rev = "revenue" in dept_query or "admin" in dept_query
 
-                match = (dept_query in effective_dept) or \
-                        (is_kwa and ("kwa" in effective_dept or "water" in effective_dept)) or \
-                        (is_pwd and ("pwd" in effective_dept or "road" in effective_dept or "works" in effective_dept)) or \
-                        (is_kseb and ("kseb" in effective_dept or "power" in effective_dept or "electricity" in effective_dept)) or \
-                        (is_lsgd and ("lsgd" in effective_dept or "panchayat" in effective_dept)) or \
-                        (is_rev and ("revenue" in effective_dept or "admin" in effective_dept))
+                match = (
+                    (assigned_dept.lower() == department_id.lower())
+                    or (is_kwa and assigned_dept == "Kerala Water Authority (KWA)")
+                    or (is_pwd and assigned_dept == "Public Works Department (PWD)")
+                    or (is_kseb and assigned_dept == "Kerala State Electricity Board (KSEB)")
+                    or (is_lsgd and assigned_dept == "Local Self Government Department (LSGD / Panchayat)")
+                    or (is_rev and assigned_dept == "Revenue & General Administration")
+                )
 
                 if not match:
                     continue
@@ -815,6 +820,57 @@ class OfficialService:
         sorted_queue = sorted(all_grievances, key=attention_sort_key, reverse=True)
         return sorted_queue
 
+    @staticmethod
+    def classify_grievance_department(g: Grievance) -> str:
+        """Deterministically classifies every grievance to a valid statutory department without dropping unassigned records."""
+        # 1. Explicit department_id if present
+        raw = (g.department_id or "").strip()
+        if raw:
+            r_lower = raw.lower()
+            if "water" in r_lower or "kwa" in r_lower:
+                return "Kerala Water Authority (KWA)"
+            if "pwd" in r_lower or "road" in r_lower or "works" in r_lower or "bridge" in r_lower:
+                return "Public Works Department (PWD)"
+            if "kseb" in r_lower or "power" in r_lower or "electric" in r_lower:
+                return "Kerala State Electricity Board (KSEB)"
+            if "lsgd" in r_lower or "panchayat" in r_lower or "municipality" in r_lower or "corporation" in r_lower or "waste" in r_lower or "garbage" in r_lower or "drain" in r_lower:
+                return "Local Self Government Department (LSGD / Panchayat)"
+            if "revenue" in r_lower or "admin" in r_lower or "land" in r_lower or "survey" in r_lower:
+                return "Revenue & General Administration"
+
+        # 2. Predicted category from AI analysis
+        pred = (g.analysis.predicted_category if g.analysis else "") or ""
+        if pred:
+            p_lower = pred.lower()
+            if "water" in p_lower or "kwa" in p_lower:
+                return "Kerala Water Authority (KWA)"
+            if "pwd" in p_lower or "road" in p_lower or "works" in p_lower:
+                return "Public Works Department (PWD)"
+            if "kseb" in p_lower or "power" in p_lower or "electric" in p_lower:
+                return "Kerala State Electricity Board (KSEB)"
+            if "lsgd" in p_lower or "panchayat" in p_lower or "waste" in p_lower or "sanitation" in p_lower or "drain" in p_lower:
+                return "Local Self Government Department (LSGD / Panchayat)"
+            if "revenue" in p_lower or "admin" in p_lower or "land" in p_lower:
+                return "Revenue & General Administration"
+
+        # 3. Category / Title / Original Text keyword hints
+        category = g.category or ""
+        title = g.title or ""
+        desc = g.description or ""
+        orig = g.original_text or ""
+        content = f"{category} {title} {desc} {orig}".lower()
+        if any(k in content for k in ("water", "kwa", "pipe", "leak", "വെള്ളം", "പൈപ്പ്", "കുടിവെള്ളം")):
+            return "Kerala Water Authority (KWA)"
+        if any(k in content for k in ("road", "pwd", "pothole", "tar", "bridge", "റോഡ്", "കുഴി", "ടാർ")):
+            return "Public Works Department (PWD)"
+        if any(k in content for k in ("kseb", "electricity", "power", "voltage", "current", "വൈദ്യുതി", "കറണ്ട്", "പോസ്റ്റ്")):
+            return "Kerala State Electricity Board (KSEB)"
+        if any(k in content for k in ("panchayat", "lsgd", "waste", "garbage", "drainage", "മാലിന്യം", "പഞ്ചായത്ത്", "ഓട")):
+            return "Local Self Government Department (LSGD / Panchayat)"
+
+        # 4. Fallback: all unassigned / general petitions belong to Revenue & General Administration (Nodal Department)
+        return "Revenue & General Administration"
+
     async def get_department_workload(self) -> List[DepartmentWorkloadResponse]:
         from sqlalchemy.orm import selectinload
         stmt = (
@@ -832,27 +888,14 @@ class OfficialService:
             "Revenue & General Administration",
         ]
 
+        dept_groups = {d: [] for d in depts}
+        for g in all_grievances:
+            assigned_dept = self.classify_grievance_department(g)
+            dept_groups[assigned_dept].append(g)
+
         workloads = []
         for d in depts:
-            dept_key = d.lower()
-            is_kwa = "kwa" in dept_key
-            is_pwd = "pwd" in dept_key
-            is_kseb = "kseb" in dept_key
-            is_lsgd = "lsgd" in dept_key
-            is_rev = "revenue" in dept_key
-
-            dept_g = []
-            for g in all_grievances:
-                eff = (g.department_id or (g.analysis.predicted_category if g.analysis else "") or "").lower()
-                match = (dept_key in eff) or \
-                        (is_kwa and ("kwa" in eff or "water" in eff)) or \
-                        (is_pwd and ("pwd" in eff or "road" in eff or "works" in eff)) or \
-                        (is_kseb and ("kseb" in eff or "power" in eff or "electricity" in eff)) or \
-                        (is_lsgd and ("lsgd" in eff or "panchayat" in eff)) or \
-                        (is_rev and ("revenue" in eff or "admin" in eff))
-                if match:
-                    dept_g.append(g)
-
+            dept_g = dept_groups[d]
             pending = sum(1 for g in dept_g if g.status in ("draft", "intake_received", "under_analysis"))
             under_proc = sum(1 for g in dept_g if g.status == "under_processing")
             clarification = sum(1 for g in dept_g if g.status == "clarification_required")

@@ -107,8 +107,15 @@ class GrievanceService:
             (draft_in.title or "") + " " + (draft_in.description or "") + " " + (draft_in.original_text or ""),
             department=getattr(draft_in, "category", None) or getattr(draft_in, "department", None),
         )
-        db_grievance.priority = p_eval.priority.lower()
-        db_grievance.priority_score = p_eval.priority_score
+        if draft_in.priority and draft_in.priority.strip():
+            db_grievance.priority = draft_in.priority.strip().lower()
+            if db_grievance.priority in ("high", "critical") and (p_eval.priority_score or 0) < 60:
+                db_grievance.priority_score = 75
+            else:
+                db_grievance.priority_score = p_eval.priority_score
+        else:
+            db_grievance.priority = p_eval.priority.lower()
+            db_grievance.priority_score = p_eval.priority_score
         await self.repo.db.flush()
 
         # Trigger AI analysis for direct_text grievances immediately and transition status to INTAKE_RECEIVED

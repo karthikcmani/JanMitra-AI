@@ -915,35 +915,106 @@ class _OfficialDashboardScreenState extends ConsumerState<OfficialDashboardScree
   }
 
   Widget _buildWorkloadList(List<DepartmentWorkloadModel> workloads) {
+    final totalPending = workloads.fold<int>(0, (sum, w) => sum + w.pending);
+    final totalForwarded = workloads.fold<int>(0, (sum, w) => sum + w.forwarded);
+    final totalCount = workloads.fold<int>(0, (sum, w) => sum + w.total);
+    final currentFilter = ref.watch(officialFilterNotifierProvider);
+
     return Column(
-      children: workloads.map((w) {
-        return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    w.departmentName,
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+      children: [
+        // Statewide Total Summary Banner
+        Card(
+          margin: const EdgeInsets.only(bottom: 10),
+          color: AppTheme.primaryBlue.withValues(alpha: 0.08),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: AppTheme.primaryBlue.withValues(alpha: 0.3)),
+          ),
+          child: InkWell(
+            onTap: () {
+              ref.read(officialFilterNotifierProvider.notifier).update((s) => s.copyWith(clearDept: true));
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.pie_chart_rounded, size: 18, color: AppTheme.primaryBlue),
+                      SizedBox(width: 8),
+                      Text(
+                        'Statewide Workload Total',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppTheme.primaryBlue),
+                      ),
+                    ],
                   ),
-                ),
-                Row(
-                  children: [
-                    _buildMiniBadge('Pending: ${w.pending}', AppTheme.warning),
-                    const SizedBox(width: 4),
-                    _buildMiniBadge('Forwarded: ${w.forwarded}', AppTheme.primaryBlue),
-                    const SizedBox(width: 4),
-                    _buildMiniBadge('Total: ${w.total}', AppTheme.textMuted),
-                  ],
-                ),
-              ],
+                  Row(
+                    children: [
+                      _buildMiniBadge('Pending: $totalPending', AppTheme.warning),
+                      const SizedBox(width: 4),
+                      _buildMiniBadge('Forwarded: $totalForwarded', AppTheme.primaryBlue),
+                      const SizedBox(width: 4),
+                      _buildMiniBadge('Total: $totalCount', AppTheme.textPrimary),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
-        );
-      }).toList(),
+        ),
+        ...workloads.map((w) {
+          final isSelected = currentFilter.departmentId == w.departmentName;
+          return Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(
+                color: isSelected ? AppTheme.primaryBlue : Colors.grey.withValues(alpha: 0.2),
+                width: isSelected ? 1.5 : 1.0,
+              ),
+            ),
+            child: InkWell(
+              onTap: () {
+                if (isSelected) {
+                  ref.read(officialFilterNotifierProvider.notifier).update((s) => s.copyWith(clearDept: true));
+                } else {
+                  ref.read(officialFilterNotifierProvider.notifier).update((s) => s.copyWith(departmentId: w.departmentName));
+                }
+              },
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        w.departmentName,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: isSelected ? AppTheme.primaryBlue : null,
+                        ),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        _buildMiniBadge('Pending: ${w.pending}', AppTheme.warning),
+                        const SizedBox(width: 4),
+                        _buildMiniBadge('Forwarded: ${w.forwarded}', AppTheme.primaryBlue),
+                        const SizedBox(width: 4),
+                        _buildMiniBadge('Total: ${w.total}', AppTheme.textMuted),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }),
+      ],
     );
   }
 
